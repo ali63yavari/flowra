@@ -2,17 +2,29 @@ import { create } from "zustand";
 import { v4 as uuid } from "uuid";
 import { WorkflowDefinition, Step } from "@/lib/types";
 
+interface Edge {
+    id: string;
+    source: string;
+    target: string;
+}
+
 interface WorkflowState {
     workflow: WorkflowDefinition;
+    edges: Edge[];
     selectedStepId?: string;
 
     addStep: (type: string, position: { x: number; y: number }) => void;
+    connectSteps: (source: string, target: string) => void;
+
     updateStep: (id: string, step: Partial<Step>) => void;
     selectStep: (id: string) => void;
+
+    buildDSL: () => WorkflowDefinition;
 }
 
-export const useWorkflowStore = create<WorkflowState>((set) => ({
+export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     workflow: { steps: [] },
+    edges: [],
 
     addStep: (type, position) =>
         set((state) => {
@@ -30,6 +42,18 @@ export const useWorkflowStore = create<WorkflowState>((set) => ({
             };
         }),
 
+    connectSteps: (source, target) =>
+        set((state) => ({
+            edges: [
+                ...state.edges,
+                {
+                    id: `${source}-${target}`,
+                    source,
+                    target,
+                },
+            ],
+        })),
+
     updateStep: (id, updates) =>
         set((state) => ({
             workflow: {
@@ -40,4 +64,21 @@ export const useWorkflowStore = create<WorkflowState>((set) => ({
         })),
 
     selectStep: (id) => set({ selectedStepId: id }),
+
+    buildDSL: () => {
+        const { workflow, edges } = get();
+
+        const nextMap: Record<string, string> = {};
+
+        edges.forEach((e) => {
+            nextMap[e.source] = e.target;
+        });
+
+        return {
+            steps: workflow.steps.map((step) => ({
+                ...step,
+                next: nextMap[step.id] || "",
+            })),
+        };
+    },
 }));

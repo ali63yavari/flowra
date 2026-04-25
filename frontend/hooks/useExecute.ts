@@ -9,7 +9,7 @@ export function useExecute() {
     const [result, setResult] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const workflow = useWorkflowStore((s) => s.workflow);
+    const buildDSL = useWorkflowStore((s) => s.buildDSL);
 
     const run = async (input: any) => {
         setLoading(true);
@@ -17,6 +17,8 @@ export function useExecute() {
         setError(null);
 
         try {
+            const workflow = buildDSL();
+
             const res = await executeDirect(workflow, input);
 
             if (res.status === "error") {

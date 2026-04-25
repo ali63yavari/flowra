@@ -5,6 +5,8 @@ import ReactFlow, {
     Controls,
     Node,
     Edge,
+    addEdge,
+    Connection,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
@@ -12,8 +14,11 @@ import { useWorkflowStore } from "@/store/workflowStore";
 
 export default function WorkflowCanvas() {
     const steps = useWorkflowStore((s) => s.workflow.steps);
+    const edgesState = useWorkflowStore((s) => s.edges);
+
     const selectStep = useWorkflowStore((s) => s.selectStep);
     const addStep = useWorkflowStore((s) => s.addStep);
+    const connectSteps = useWorkflowStore((s) => s.connectSteps);
 
     const nodes: Node[] = steps.map((step, i) => ({
         id: step.id,
@@ -21,13 +26,13 @@ export default function WorkflowCanvas() {
         data: { label: step.type },
     }));
 
-    const edges: Edge[] = steps
-        .filter((s) => s.next)
-        .map((s) => ({
-            id: `${s.id}-${s.next}`,
-            source: s.id,
-            target: s.next!,
-        }));
+    const edges: Edge[] = edgesState;
+
+    const onConnect = (connection: Connection) => {
+        if (!connection.source || !connection.target) return;
+
+        connectSteps(connection.source, connection.target);
+    };
 
     const onDrop = (event: React.DragEvent) => {
         event.preventDefault();
@@ -57,6 +62,8 @@ export default function WorkflowCanvas() {
                 nodes={nodes}
                 edges={edges}
                 onNodeClick={(_, node) => selectStep(node.id)}
+                onConnect={onConnect}
+                fitView
             >
                 <Background />
                 <Controls />

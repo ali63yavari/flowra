@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"flowra/internal/api/handlers"
+	"flowra/internal/api/middleware"
 	"flowra/internal/database"
 	"flowra/internal/queue"
 	"flowra/internal/repository"
@@ -17,7 +18,12 @@ func main() {
 	db := database.NewDB("postgres://user:pass@localhost:5432/flowra")
 
 	jobRepo := repository.NewJobRepository(db)
+	tenantRepo := repository.NewTenantRepository(db)
+
 	q := queue.NewRedisQueue("localhost:6379", "flowra_jobs")
+
+	app.Use(middleware.APIKeyAuth(tenantRepo))
+	app.Use(middleware.RateLimit())
 
 	execHandler := handlers.NewExecuteHandler(q, jobRepo)
 	jobHandler := handlers.NewJobHandler(jobRepo)

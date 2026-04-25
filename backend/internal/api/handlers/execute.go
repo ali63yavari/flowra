@@ -10,6 +10,7 @@ import (
 	"flowra/internal/models"
 	"flowra/internal/queue"
 	"flowra/internal/repository"
+	"flowra/internal/usage"
 )
 
 type ExecuteHandler struct {
@@ -33,12 +34,15 @@ func (h *ExecuteHandler) Execute(c *fiber.Ctx) error {
 		return err
 	}
 
+	tenant := c.Locals("tenant").(*models.Tenant)
+
 	inputBytes, _ := json.Marshal(input)
 
 	jobID := uuid.NewString()
 
 	job := &models.Job{
 		ID:            jobID,
+		TenantID:      tenant.ID,
 		IntegrationID: c.Params("id"),
 		Status:        models.JobQueued,
 		Input:         inputBytes,
@@ -50,16 +54,15 @@ func (h *ExecuteHandler) Execute(c *fiber.Ctx) error {
 		return err
 	}
 
-	err := h.queue.Publish(
+	_ = h.queue.Publish(
 		context.Background(), queue.Job{
 			ID:            jobID,
 			IntegrationID: job.IntegrationID,
 			Input:         input,
 		},
 	)
-	if err != nil {
-		return err
-	}
+
+	usage.TrackExecution(tenant.ID, job.IntegrationID)
 
 	return c.JSON(
 		fiber.Map{

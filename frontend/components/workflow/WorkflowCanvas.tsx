@@ -5,7 +5,6 @@ import ReactFlow, {
     Controls,
     Node,
     Edge,
-    addEdge,
     Connection,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -16,60 +15,86 @@ export default function WorkflowCanvas() {
     const steps = useWorkflowStore((s) => s.workflow.steps);
     const edgesState = useWorkflowStore((s) => s.edges);
 
+    const selectedStepId = useWorkflowStore((s) => s.selectedStepId);
     const selectStep = useWorkflowStore((s) => s.selectStep);
-    const addStep = useWorkflowStore((s) => s.addStep);
     const connectSteps = useWorkflowStore((s) => s.connectSteps);
+    const updatePosition = useWorkflowStore((s) => s.updatePosition);
+    const deleteStep = useWorkflowStore((s) => s.deleteStep);
+    const deleteEdge = useWorkflowStore((s) => s.deleteEdge);
+    const addStep = useWorkflowStore((s) => s.addStep); // 🔥 IMPORTANT
 
-    const nodes: Node[] = steps.map((step, i) => ({
+    // ✅ nodes
+    const nodes: Node[] = steps.map((step) => ({
         id: step.id,
-        position: { x: 100, y: i * 120 },
+        position: step.position,
         data: { label: step.type },
+        selectable: true,
+        draggable: true,
+        selected: step.id === selectedStepId,
+        style: {
+            background: "#1f2937",
+            color: "#fff",
+            padding: 10,
+            borderRadius: 6,
+        },
     }));
 
+    // ✅ edges
     const edges: Edge[] = edgesState.map((e) => ({
         ...e,
         label: e.type === "true" ? "✔" : e.type === "false" ? "✖" : "",
     }));
 
-    const onConnect = (connection: Connection) => {
-        const stepsMap = Object.fromEntries(
-            steps.map((s) => [s.id, s])
-        );
-
-        const onConnect = (c: Connection) => {
-            if (!c.source || !c.target) return;
-
-            const sourceStep = stepsMap[c.source];
-
-            let edgeType: "true" | "false" | undefined;
-
-            if (sourceStep?.type === "condition") {
-                const choice = prompt("Edge type? (true / false)");
-                if (choice === "true" || choice === "false") {
-                    edgeType = choice;
-                } else {
-                    alert("Invalid type. Use true or false.");
-                    return;
-                }
-            }
-
-            connectSteps(c.source, c.target, edgeType);
-        };
+    // ✅ connect nodes
+    const onConnect = (c: Connection) => {
+        if (!c.source || !c.target) return;
+        connectSteps(c.source, c.target);
     };
 
+    // ✅ persist drag position
+    const onNodeDragStop = (_: any, node: Node) => {
+        updatePosition(node.id, node.position);
+        selectStep(node.id);
+    };
+
+    // ✅ node deletion
+    const onNodesChange = (changes: any[]) => {
+        changes.forEach((c) => {
+            if (c.type === "remove") {
+                deleteStep(c.id);
+            }
+        });
+    };
+
+    // ✅ edge deletion
+    const onEdgesChange = (changes: any[]) => {
+        changes.forEach((c) => {
+            if (c.type === "remove") {
+                deleteEdge(c.id);
+            }
+        });
+    };
+
+    // 🔥 DROP HANDLER (THIS WAS MISSING)
     const onDrop = (event: React.DragEvent) => {
         event.preventDefault();
 
         const type = event.dataTransfer.getData("application/flowra-node");
 
+        if (!type) return;
+
+        const bounds = event.currentTarget.getBoundingClientRect();
+
         const position = {
-            x: event.clientX - 200,
-            y: event.clientY,
+            x: event.clientX - bounds.left,
+            y: event.clientY - bounds.top,
         };
 
-        addStep(type, position);
+        const newId = addStep(type, position);
+        selectStep(newId);
     };
 
+    // 🔥 REQUIRED FOR DROP TO WORK
     const onDragOver = (event: React.DragEvent) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
@@ -80,12 +105,18 @@ export default function WorkflowCanvas() {
             style={{ width: "100%", height: "600px" }}
             onDrop={onDrop}
             onDragOver={onDragOver}
+            tabIndex={0} // keep for keyboard delete
         >
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
+                selectNodesOnDrag={false}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
                 onNodeClick={(_, node) => selectStep(node.id)}
                 onConnect={onConnect}
+                onNodeDragStop={onNodeDragStop}
+                deleteKeyCode={["Backspace", "Delete"]}
                 fitView
             >
                 <Background />

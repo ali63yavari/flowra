@@ -9,22 +9,29 @@ interface Edge {
     type?: "true" | "false";
 }
 
+interface PositionedStep extends Step {
+    position: { x: number; y: number };
+}
+
 interface WorkflowState {
-    workflow: WorkflowDefinition;
+    workflow: { steps: PositionedStep[] };
     edges: Edge[];
 
     selectedStepId?: string;
 
-    addStep: (type: string, position: { x: number; y: number }) => void;
+    addStep: (type: string, position: { x: number; y: number }) => string;
+    updatePosition: (id: string, position: { x: number; y: number }) => void;
+
     connectSteps: (
         source: string,
         target: string,
         type?: "true" | "false"
     ) => void;
 
-    selectStep: (id: string) => void;
+    deleteStep: (id: string) => void;
+    deleteEdge: (id: string) => void;
 
-    updateStep: (id: string, step: Partial<Step>) => void;
+    selectStep: (id: string) => void;
 
     buildDSL: () => WorkflowDefinition;
 }
@@ -32,29 +39,41 @@ interface WorkflowState {
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     workflow: { steps: [] },
     edges: [],
-    selectedStepId: undefined,
 
-    addStep: (type, position) =>
-        set((state) => {
-            const newStep: Step = {
-                id: uuid(),
-                type: type as any,
-                config: {},
-            };
+    addStep: (type, position) => {
+        const id = uuid();
+        set((state) => ({
+            workflow: {
+                steps: [
+                    ...state.workflow.steps,
+                    {
+                        id: id,
+                        type: type as any,
+                        config: {},
+                        position,
+                    },
+                ],
+            },
+        }));
 
-            return {
-                workflow: {
-                    steps: [...state.workflow.steps, newStep],
-                },
-            };
-        }),
+        return id;
+    },
+
+    updatePosition: (id, position) =>
+        set((state) => ({
+            workflow: {
+                steps: state.workflow.steps.map((s) =>
+                    s.id === id ? { ...s, position } : s
+                ),
+            },
+        })),
 
     connectSteps: (source, target, type) =>
         set((state) => ({
             edges: [
                 ...state.edges,
                 {
-                    id: `${source}-${target}-${type || "default"}`,
+                    id: uuid(),
                     source,
                     target,
                     type,
@@ -62,19 +81,22 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             ],
         })),
 
-    selectStep: (id) =>
-        set({
-            selectedStepId: id,
-        }),
-
-    updateStep: (id, updates) =>
+    deleteStep: (id) =>
         set((state) => ({
             workflow: {
-                steps: state.workflow.steps.map((s) =>
-                    s.id === id ? { ...s, ...updates } : s
-                ),
+                steps: state.workflow.steps.filter((s) => s.id !== id),
             },
+            edges: state.edges.filter(
+                (e) => e.source !== id && e.target !== id
+            ),
         })),
+
+    deleteEdge: (id) =>
+        set((state) => ({
+            edges: state.edges.filter((e) => e.id !== id),
+        })),
+
+    selectStep: (id) => set({ selectedStepId: id }),
 
     buildDSL: () => {
         const { workflow, edges } = get();
@@ -91,7 +113,9 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
         return {
             steps: workflow.steps.map((s) => ({
-                ...s,
+                id: s.id,
+                type: s.type,
+                config: s.config,
                 ...map[s.id],
             })),
         };

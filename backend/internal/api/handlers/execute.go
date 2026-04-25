@@ -42,6 +42,8 @@ func (h *ExecuteHandler) Execute(c *fiber.Ctx) error {
 		IntegrationID: c.Params("id"),
 		Status:        models.JobQueued,
 		Input:         inputBytes,
+		MaxAttempts:   3,
+		Attempts:      0,
 	}
 
 	if err := h.repo.Create(context.Background(), job); err != nil {

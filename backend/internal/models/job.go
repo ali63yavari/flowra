@@ -9,10 +9,12 @@ import (
 type JobStatus string
 
 const (
-	JobQueued  JobStatus = "queued"
-	JobRunning JobStatus = "running"
-	JobSuccess JobStatus = "success"
-	JobFailed  JobStatus = "failed"
+	JobQueued   JobStatus = "queued"
+	JobRunning  JobStatus = "running"
+	JobSuccess  JobStatus = "success"
+	JobFailed   JobStatus = "failed"
+	JobRetrying JobStatus = "retrying"
+	JobDead     JobStatus = "dead"
 )
 
 type Job struct {
@@ -25,6 +27,9 @@ type Job struct {
 	Input  datatypes.JSON
 	Output datatypes.JSON
 	Error  *string
+
+	Attempts    int
+	MaxAttempts int
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

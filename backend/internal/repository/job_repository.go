@@ -17,6 +17,7 @@ type JobRepository interface {
 		output []byte,
 		errMsg *string,
 	) error
+	IncrementAttempts(ctx context.Context, id string) error
 	GetByID(ctx context.Context, id string) (*models.Job, error)
 }
 
@@ -48,6 +49,13 @@ func (r *jobRepository) UpdateStatus(
 				"error":  errMsg,
 			},
 		).Error
+}
+
+func (r *jobRepository) IncrementAttempts(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).
+		Model(&models.Job{}).
+		Where("id = ?", id).
+		Update("attempts", gorm.Expr("attempts + 1")).Error
 }
 
 func (r *jobRepository) GetByID(ctx context.Context, id string) (

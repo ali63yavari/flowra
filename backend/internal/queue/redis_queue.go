@@ -10,6 +10,7 @@ import (
 type RedisQueue struct {
 	client *redis.Client
 	key    string
+	dlqKey string
 }
 
 func NewRedisQueue(addr string, key string) *RedisQueue {
@@ -22,6 +23,7 @@ func NewRedisQueue(addr string, key string) *RedisQueue {
 	return &RedisQueue{
 		client: rdb,
 		key:    key,
+		dlqKey: key + "_dlq",
 	}
 }
 
@@ -30,8 +32,15 @@ func (q *RedisQueue) Publish(ctx context.Context, job Job) error {
 	if err != nil {
 		return err
 	}
-
 	return q.client.RPush(ctx, q.key, data).Err()
+}
+
+func (q *RedisQueue) PublishToDLQ(ctx context.Context, job Job) error {
+	data, err := json.Marshal(job)
+	if err != nil {
+		return err
+	}
+	return q.client.RPush(ctx, q.dlqKey, data).Err()
 }
 
 func (q *RedisQueue) Consume(

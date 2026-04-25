@@ -71,6 +71,9 @@ tmp/
 /frontend/.next/
 /frontend/out/
 /frontend/build/
+/frontend/.pnp
+/frontend/.pnp.*
+/frontend/.yarn/*
 
 # Logs
 /frontend/npm-debug.log*
@@ -88,6 +91,11 @@ tmp/
 
 # TypeScript
 /frontend/tsconfig.tsbuildinfo
+/frontend/next-env.d.ts
+
+# vercel
+.vercel
+
 
 ##################################################
 # PACKAGE MANAGERS
@@ -103,7 +111,7 @@ tmp/
 # yarn.lock
 
 # pnpm
-# pnpm-lock.yaml
+/frontend/pnpm-lock.yaml
 
 ##################################################
 # DOCKER / DEVOPS

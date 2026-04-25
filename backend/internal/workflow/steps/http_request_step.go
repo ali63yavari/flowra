@@ -19,6 +19,7 @@ type HTTPRequestStep struct {
 	id     string
 	next   string
 	config HTTPRequestConfig
+
 	client httpclient.Client
 }
 
@@ -32,8 +33,11 @@ func NewHTTPRequestStep(def workflow.StepDefinition) (workflow.Step, error) {
 		id:     def.ID,
 		next:   def.Next,
 		config: cfg,
-		client: nil, // inject later via DI
 	}, nil
+}
+
+func (s *HTTPRequestStep) SetRuntime(rt *workflow.Runtime) {
+	s.client = rt.HTTPClient
 }
 
 func (s *HTTPRequestStep) ID() string {
@@ -68,6 +72,7 @@ func (s *HTTPRequestStep) Execute(
 		Body:       resp.Body,
 		Headers:    resp.Headers,
 	}
+
 	state.LastHTML = string(resp.Body)
 
 	return nil

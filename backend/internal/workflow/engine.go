@@ -6,11 +6,12 @@ import (
 )
 
 type Engine struct {
-	steps map[string]Step
-	start string
+	steps   map[string]Step
+	start   string
+	runtime *Runtime
 }
 
-func NewEngine(def WorkflowDefinition) (*Engine, error) {
+func NewEngine(def WorkflowDefinition, runtime *Runtime) (*Engine, error) {
 	if len(def.Steps) == 0 {
 		return nil, fmt.Errorf("no steps defined")
 	}
@@ -22,12 +23,19 @@ func NewEngine(def WorkflowDefinition) (*Engine, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// Inject runtime if supported
+		if injectable, ok := step.(InjectableStep); ok {
+			injectable.SetRuntime(runtime)
+		}
+
 		steps[s.ID] = step
 	}
 
 	return &Engine{
-		steps: steps,
-		start: def.Steps[0].ID,
+		steps:   steps,
+		start:   def.Steps[0].ID,
+		runtime: runtime,
 	}, nil
 }
 

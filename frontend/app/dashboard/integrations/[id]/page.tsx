@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import WorkflowCanvas from "@/components/workflow/WorkflowCanvas";
 import NodeEditor from "@/components/workflow/NodeEditor";
+import RunPanel from "@/components/workflow/RunPanel";
 import { useWorkflowStore } from "@/store/workflowStore";
 
 export default function BuilderPage() {
@@ -24,6 +25,7 @@ export default function BuilderPage() {
         <div style={{ display: "flex", gap: 20 }}>
             <div style={{ flex: 2 }}>
                 <WorkflowCanvas />
+                <RunPanel />
             </div>
 
             <div style={{ flex: 1 }}>

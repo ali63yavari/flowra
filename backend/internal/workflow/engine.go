@@ -63,7 +63,23 @@ func (e *Engine) Execute(ctx context.Context, state *ExecutionState) error {
 			return err
 		}
 
-		current = step.Next(state)
+		next := step.Next(state)
+
+		// branching support
+		if condStep, ok := step.(interface {
+			NextTrue(*ExecutionState) string
+			NextFalse(*ExecutionState) string
+			Evaluate(*ExecutionState) bool
+		}); ok {
+			if condStep.Evaluate(state) {
+				next = condStep.NextTrue(state)
+			} else {
+				next = condStep.NextFalse(state)
+			}
+		}
+
+		current = next
+		
 		stepCount++
 	}
 

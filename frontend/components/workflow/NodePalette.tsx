@@ -5,6 +5,7 @@ const nodeTypes = [
     { type: "form_submit", label: "Form Submit" },
     { type: "extract", label: "Extract Data" },
     { type: "browser", label: "Browser Step" },
+    { type: "condition", label: "Condition (if/else)" },
 ];
 
 export default function NodePalette() {

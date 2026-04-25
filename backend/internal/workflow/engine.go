@@ -9,9 +9,12 @@ type Engine struct {
 	steps   map[string]Step
 	start   string
 	runtime *Runtime
+	limits  Limits
 }
 
-func NewEngine(def WorkflowDefinition, runtime *Runtime) (*Engine, error) {
+func NewEngine(def WorkflowDefinition, runtime *Runtime, limits Limits) (
+	*Engine, error,
+) {
 	if len(def.Steps) == 0 {
 		return nil, fmt.Errorf("no steps defined")
 	}
@@ -24,7 +27,6 @@ func NewEngine(def WorkflowDefinition, runtime *Runtime) (*Engine, error) {
 			return nil, err
 		}
 
-		// Inject runtime if supported
 		if injectable, ok := step.(InjectableStep); ok {
 			injectable.SetRuntime(runtime)
 		}
@@ -36,13 +38,22 @@ func NewEngine(def WorkflowDefinition, runtime *Runtime) (*Engine, error) {
 		steps:   steps,
 		start:   def.Steps[0].ID,
 		runtime: runtime,
+		limits:  limits,
 	}, nil
 }
 
 func (e *Engine) Execute(ctx context.Context, state *ExecutionState) error {
+	ctx, cancel := WithLimits(ctx, e.limits)
+	defer cancel()
+
 	current := e.start
+	stepCount := 0
 
 	for current != "" {
+		if e.limits.MaxSteps > 0 && stepCount >= e.limits.MaxSteps {
+			return fmt.Errorf("max steps exceeded")
+		}
+
 		step, ok := e.steps[current]
 		if !ok {
 			return fmt.Errorf("step not found: %s", current)
@@ -53,6 +64,7 @@ func (e *Engine) Execute(ctx context.Context, state *ExecutionState) error {
 		}
 
 		current = step.Next(state)
+		stepCount++
 	}
 
 	return nil

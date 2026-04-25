@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"time"
 
 	"flowra/internal/workflow"
 	"flowra/internal/workflow/steps"
@@ -13,7 +14,6 @@ type Service struct {
 
 func NewService() *Service {
 	runtime := workflow.NewRuntime()
-
 	steps.RegisterAll()
 
 	return &Service{
@@ -26,7 +26,13 @@ func (s *Service) Execute(
 	def workflow.WorkflowDefinition,
 	input map[string]interface{},
 ) (map[string]interface{}, error) {
-	engine, err := workflow.NewEngine(def, s.runtime)
+
+	limits := workflow.Limits{
+		MaxSteps: 50,
+		Timeout:  30 * time.Second,
+	}
+
+	engine, err := workflow.NewEngine(def, s.runtime, limits)
 	if err != nil {
 		return nil, err
 	}

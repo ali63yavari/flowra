@@ -23,15 +23,7 @@ type BrowserStep struct {
 	next   string
 	config BrowserConfig
 
-	browser workflowBrowser
-}
-
-type workflowBrowser interface {
-	Navigate(ctx context.Context, url string) error
-	Click(ctx context.Context, selector string) error
-	Fill(ctx context.Context, selector string, value string) error
-	WaitVisible(ctx context.Context, selector string) error
-	HTML(ctx context.Context) (string, error)
+	runtime *workflow.Runtime
 }
 
 func NewBrowserStep(def workflow.StepDefinition) (workflow.Step, error) {
@@ -48,7 +40,7 @@ func NewBrowserStep(def workflow.StepDefinition) (workflow.Step, error) {
 }
 
 func (s *BrowserStep) SetRuntime(rt *workflow.Runtime) {
-	s.browser = rt.Browser
+	s.runtime = rt
 }
 
 func (s *BrowserStep) ID() string {
@@ -59,41 +51,46 @@ func (s *BrowserStep) Execute(
 	ctx context.Context,
 	state *workflow.ExecutionState,
 ) error {
+	b, err := s.runtime.AcquireBrowser(ctx)
+	if err != nil {
+		return err
+	}
+	defer s.runtime.ReleaseBrowser(b)
+
 	for _, action := range s.config.Actions {
 
 		switch action.Type {
 
 		case "navigate":
 			url := workflow.ResolveTemplate(action.URL, state)
-			if err := s.browser.Navigate(ctx, url); err != nil {
+			if err := b.Navigate(ctx, url); err != nil {
 				return err
 			}
 
 		case "fill":
 			val := workflow.ResolveTemplate(action.Value, state)
-			if err := s.browser.Fill(ctx, action.Selector, val); err != nil {
+			if err := b.Fill(ctx, action.Selector, val); err != nil {
 				return err
 			}
 
 		case "click":
-			if err := s.browser.Click(ctx, action.Selector); err != nil {
+			if err := b.Click(ctx, action.Selector); err != nil {
 				return err
 			}
 
 		case "wait":
-			if err := s.browser.WaitVisible(ctx, action.Selector); err != nil {
+			if err := b.WaitVisible(ctx, action.Selector); err != nil {
 				return err
 			}
 		}
 	}
 
-	html, err := s.browser.HTML(ctx)
+	html, err := b.HTML(ctx)
 	if err != nil {
 		return err
 	}
 
 	state.LastHTML = html
-
 	return nil
 }
 

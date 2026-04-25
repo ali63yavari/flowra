@@ -3,11 +3,10 @@
 import { useExecute } from "@/hooks/useExecute";
 
 export default function RunPanel() {
-    const { run, loading, result, status } = useExecute();
+    const { run, loading, result, error } = useExecute();
 
     const handleRun = async () => {
-        // temporary static input
-        await run("123", {
+        await run({
             email: "test@test.com",
             password: "123456",
         });
@@ -19,7 +18,11 @@ export default function RunPanel() {
                 {loading ? "Running..." : "Run Workflow"}
             </button>
 
-            {status && <p>Status: {status}</p>}
+            {error && (
+                <div style={{ color: "red", marginTop: 10 }}>
+                    Error: {error}
+                </div>
+            )}
 
             {result && (
                 <pre

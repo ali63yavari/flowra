@@ -1,35 +1,35 @@
 "use client";
 
 import { useState } from "react";
-import { executeIntegration, getJob } from "@/lib/api";
+import { executeDirect } from "@/lib/api";
+import { useWorkflowStore } from "@/store/workflowStore";
 
 export function useExecute() {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<any>(null);
-    const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    const run = async (integrationId: string, input: any) => {
+    const workflow = useWorkflowStore((s) => s.workflow);
+
+    const run = async (input: any) => {
         setLoading(true);
         setResult(null);
+        setError(null);
 
-        const res = await executeIntegration(integrationId, input);
+        try {
+            const res = await executeDirect(workflow, input);
 
-        const jobId = res.job_id;
-        setStatus("queued");
-
-        // polling loop
-        const interval = setInterval(async () => {
-            const job = await getJob(jobId);
-
-            setStatus(job.status);
-
-            if (job.status === "success" || job.status === "failed") {
-                clearInterval(interval);
-                setLoading(false);
-                setResult(job.output || job.error);
+            if (res.status === "error") {
+                setError(res.error);
+            } else {
+                setResult(res.data);
             }
-        }, 1500);
+        } catch (e: any) {
+            setError(e.message);
+        }
+
+        setLoading(false);
     };
 
-    return { run, loading, result, status };
+    return { run, loading, result, error };
 }

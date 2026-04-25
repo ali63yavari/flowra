@@ -10,6 +10,8 @@ import { useWorkflowStore } from "@/store/workflowStore";
 
 export default function FlowBuilder() {
   const steps = useWorkflowStore((s) => s.workflow.steps);
+  const activeCollectionId = useWorkflowStore((s) => s.activeCollectionId);
+  const activeWorkflowId = useWorkflowStore((s) => s.activeWorkflowId);
   const selectedStepId = useWorkflowStore((s) => s.selectedStepId);
   const collapsedStepIds = useWorkflowStore((s) => s.collapsedStepIds);
   const execution = useWorkflowStore((s) => s.execution);
@@ -21,6 +23,7 @@ export default function FlowBuilder() {
   const duplicateStep = useWorkflowStore((s) => s.duplicateStep);
   const toggleCollapsed = useWorkflowStore((s) => s.toggleCollapsed);
   const loadTemplate = useWorkflowStore((s) => s.loadTemplate);
+  const createWorkflow = useWorkflowStore((s) => s.createWorkflow);
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -45,12 +48,32 @@ export default function FlowBuilder() {
     setHoverIndex(null);
   };
 
+  if (!activeWorkflowId) {
+    return (
+      <section className="flex min-h-[420px] flex-col justify-center rounded border border-slate-200 bg-white p-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">No active workflow</p>
+        <h2 className="mt-1 text-lg font-semibold text-slate-950">Create a workflow</h2>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
+          A workflow belongs to a collection and contains a sequence of one or more request steps.
+          Create one here or choose an existing workflow from the sidebar.
+        </p>
+        <button
+          type="button"
+          onClick={() => createWorkflow(activeCollectionId)}
+          className="mt-4 w-fit rounded bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+        >
+          New workflow
+        </button>
+      </section>
+    );
+  }
+
   if (steps.length === 0) {
     return (
       <section className="flex min-h-[640px] flex-col rounded border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linear flow</p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-950">Create your first workflow step</h2>
+          <h2 className="mt-1 text-lg font-semibold text-slate-950">Create your first request step</h2>
         </div>
         <div className="grid flex-1 content-start gap-3 p-5 md:grid-cols-2">
           {workflowTemplates.map((template) => (
@@ -87,7 +110,7 @@ export default function FlowBuilder() {
           onClick={() => insertStepAt(steps.length, "http_request")}
           className="rounded bg-slate-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
         >
-          Add request
+          Add HTTP request
         </button>
       </div>
 

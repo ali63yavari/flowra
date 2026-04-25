@@ -95,10 +95,42 @@ export interface ValidationIssue {
 
 export type ExecutionStatus = "idle" | "validating" | "running" | "success" | "failed";
 
+export interface WorkflowExecutionState {
+  status: ExecutionStatus;
+  activeStepId?: string;
+  failedStepId?: string;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  lastWorkflow?: WorkflowDefinition | null;
+}
+
 export interface WorkflowTemplate {
   id: string;
   name: string;
   description: string;
   steps: Step[];
   branchTargets?: Record<string, BranchTargets>;
+}
+
+export interface WorkspaceCollection {
+  id: string;
+  name: string;
+  workflowIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CollectionWorkflow {
+  id: string;
+  collectionId: string;
+  name: string;
+  description: string;
+  workflow: WorkflowDefinition;
+  branchTargets: Record<string, BranchTargets>;
+  selectedStepId?: string;
+  collapsedStepIds: string[];
+  errors: ValidationIssue[];
+  execution: WorkflowExecutionState;
+  createdAt: string;
+  updatedAt: string;
 }

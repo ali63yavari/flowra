@@ -6,6 +6,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 
 export default function RunPanel() {
   const { run, loading, status, result, error, lastWorkflow } = useExecute();
+  const activeWorkflowId = useWorkflowStore((s) => s.activeWorkflowId);
   const validate = useWorkflowStore((s) => s.validate);
   const errors = useWorkflowStore((s) => s.errors);
   const [inputText, setInputText] = useState('{\n  "email": "test@test.com",\n  "password": "123456"\n}');
@@ -14,6 +15,10 @@ export default function RunPanel() {
   const hasBlockingErrors = errors.some((issue) => issue.severity === "error");
 
   const handleRun = async () => {
+    if (!activeWorkflowId) {
+      setInputError("Select or create a workflow before running.");
+      return;
+    }
     try {
       const parsed = JSON.parse(inputText) as Record<string, string | number | boolean | null>;
       setInputError(null);
@@ -41,7 +46,7 @@ export default function RunPanel() {
           <button
             type="button"
             onClick={handleRun}
-            disabled={loading || hasBlockingErrors}
+            disabled={loading || hasBlockingErrors || !activeWorkflowId}
             className="rounded bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {loading ? "Running" : "Run workflow"}
@@ -79,7 +84,9 @@ export default function RunPanel() {
           )}
           {!error && !result && !lastWorkflow && (
             <div className="rounded border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-500">
-              Run the workflow to see backend output and the exact DSL sent to `/execute-direct`.
+              {activeWorkflowId
+                ? "Run the workflow to see backend output and the exact DSL sent to `/execute-direct`."
+                : "Select or create a workflow before running."}
             </div>
           )}
         </div>

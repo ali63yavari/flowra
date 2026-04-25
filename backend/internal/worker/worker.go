@@ -3,10 +3,11 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"log"
-	"time"
+
+	"github.com/google/uuid"
 
 	"flowra/internal/models"
+	"flowra/internal/observability"
 	"flowra/internal/queue"
 	"flowra/internal/repository"
 	"flowra/internal/workflow"
@@ -17,6 +18,8 @@ type Worker struct {
 	service         ExecutionService
 	jobRepo         repository.JobRepository
 	integrationRepo repository.IntegrationRepository
+	logRepo         repository.ExecutionLogRepository
+	logger          *observability.Logger
 }
 
 type ExecutionService interface {
@@ -32,12 +35,15 @@ func NewWorker(
 	svc ExecutionService,
 	jobRepo repository.JobRepository,
 	integrationRepo repository.IntegrationRepository,
+	logRepo repository.ExecutionLogRepository,
 ) *Worker {
 	return &Worker{
 		queue:           q,
 		service:         svc,
 		jobRepo:         jobRepo,
 		integrationRepo: integrationRepo,
+		logRepo:         logRepo,
+		logger:          observability.NewLogger(),
 	}
 }
 
@@ -45,36 +51,31 @@ func (w *Worker) Start(ctx context.Context) error {
 	return w.queue.Consume(
 		ctx, func(ctx context.Context, job queue.Job) error {
 
-			dbJob, err := w.jobRepo.GetByID(ctx, job.ID)
-			if err != nil {
-				return err
-			}
-
-			// Idempotency: skip if already done
-			if dbJob.Status == models.JobSuccess {
-				return nil
-			}
-
-			_ = w.jobRepo.IncrementAttempts(ctx, job.ID)
+			w.logger.Info(
+				"job started", map[string]interface{}{
+					"job_id": job.ID,
+				},
+			)
 
 			_ = w.jobRepo.UpdateStatus(ctx, job.ID, models.JobRunning, nil, nil)
 
 			integration, err := w.integrationRepo.GetByID(ctx, job.IntegrationID)
 			if err != nil {
-				return w.failJob(ctx, job, err)
+				return w.fail(ctx, job.ID, err)
 			}
 
 			var def workflow.WorkflowDefinition
 			if err := json.Unmarshal(integration.Config, &def); err != nil {
-				return w.failJob(ctx, job, err)
+				return w.fail(ctx, job.ID, err)
 			}
 
 			result, err := w.service.Execute(ctx, def, job.Input)
 			if err != nil {
-				return w.retryOrDead(ctx, job, dbJob, err)
+				return w.fail(ctx, job.ID, err)
 			}
 
 			outputBytes, _ := json.Marshal(result)
+
 			_ = w.jobRepo.UpdateStatus(
 				ctx,
 				job.ID,
@@ -83,40 +84,50 @@ func (w *Worker) Start(ctx context.Context) error {
 				nil,
 			)
 
-			log.Printf("Job success: %s", job.ID)
+			observability.JobsProcessed.WithLabelValues("success").Inc()
+
+			w.logRepo.Create(
+				ctx, &models.ExecutionLog{
+					ID:      uuid.NewString(),
+					JobID:   job.ID,
+					Level:   "info",
+					Message: "job completed successfully",
+				},
+			)
+
+			w.logger.Info(
+				"job success", map[string]interface{}{
+					"job_id": job.ID,
+				},
+			)
+
 			return nil
 		},
 	)
 }
 
-func (w *Worker) retryOrDead(
-	ctx context.Context,
-	job queue.Job,
-	dbJob *models.Job,
-	err error,
-) error {
-
-	if dbJob.Attempts+1 >= dbJob.MaxAttempts {
-		errStr := err.Error()
-		_ = w.jobRepo.UpdateStatus(ctx, job.ID, models.JobDead, nil, &errStr)
-		_ = w.queue.PublishToDLQ(ctx, job)
-
-		log.Printf("Job moved to DLQ: %s", job.ID)
-		return err
-	}
-
-	// retry with delay
-	time.Sleep(2 * time.Second)
-
-	_ = w.jobRepo.UpdateStatus(ctx, job.ID, models.JobRetrying, nil, nil)
-	_ = w.queue.Publish(ctx, job)
-
-	log.Printf("Retrying job: %s", job.ID)
-	return err
-}
-
-func (w *Worker) failJob(ctx context.Context, job queue.Job, err error) error {
+func (w *Worker) fail(ctx context.Context, jobID string, err error) error {
 	errStr := err.Error()
-	_ = w.jobRepo.UpdateStatus(ctx, job.ID, models.JobFailed, nil, &errStr)
+
+	_ = w.jobRepo.UpdateStatus(ctx, jobID, models.JobFailed, nil, &errStr)
+
+	observability.JobsProcessed.WithLabelValues("failed").Inc()
+
+	w.logRepo.Create(
+		ctx, &models.ExecutionLog{
+			ID:      uuid.NewString(),
+			JobID:   jobID,
+			Level:   "error",
+			Message: errStr,
+		},
+	)
+
+	w.logger.Error(
+		"job failed", map[string]interface{}{
+			"job_id": jobID,
+			"error":  errStr,
+		},
+	)
+
 	return err
 }

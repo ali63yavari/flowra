@@ -1,123 +1,239 @@
 import { create } from "zustand";
 import { v4 as uuid } from "uuid";
-import { WorkflowDefinition, Step } from "@/lib/types";
-
-interface Edge {
-    id: string;
-    source: string;
-    target: string;
-    type?: "true" | "false";
-}
-
-interface PositionedStep extends Step {
-    position: { x: number; y: number };
-}
+import { createStep } from "@/lib/stepDefaults";
+import { validateWorkflow } from "@/lib/validation";
+import type {
+  BranchTargets,
+  Step,
+  StepConfig,
+  StepType,
+  ValidationIssue,
+  WorkflowDefinition,
+  WorkflowTemplate,
+} from "@/lib/types";
 
 interface WorkflowState {
-    workflow: { steps: PositionedStep[] };
-    edges: Edge[];
+  workflow: { steps: Step[] };
+  branchTargets: Record<string, BranchTargets>;
+  selectedStepId?: string;
+  collapsedStepIds: string[];
+  execution: {
+    status: "idle" | "validating" | "running" | "success" | "failed";
+    activeStepId?: string;
+    failedStepId?: string;
+  };
+  errors: ValidationIssue[];
 
-    selectedStepId?: string;
-
-    addStep: (type: string, position: { x: number; y: number }) => string;
-    updatePosition: (id: string, position: { x: number; y: number }) => void;
-
-    connectSteps: (
-        source: string,
-        target: string,
-        type?: "true" | "false"
-    ) => void;
-
-    deleteStep: (id: string) => void;
-    deleteEdge: (id: string) => void;
-
-    selectStep: (id: string) => void;
-
-    buildDSL: () => WorkflowDefinition;
+  addStep: (type: StepType) => string;
+  insertStepAt: (index: number, type: StepType) => string;
+  updateStepConfig: <T extends StepType>(
+    id: string,
+    type: T,
+    config: Extract<Step, { type: T }>["config"]
+  ) => void;
+  updateStep: (id: string, updates: Partial<Step>) => void;
+  moveStep: (from: number, to: number) => void;
+  duplicateStep: (id: string) => void;
+  deleteStep: (id: string) => void;
+  selectStep: (id?: string) => void;
+  toggleCollapsed: (id: string) => void;
+  setBranchTarget: (id: string, branch: keyof BranchTargets, targetId: string) => void;
+  loadTemplate: (template: WorkflowTemplate) => void;
+  validate: () => ValidationIssue[];
+  buildDSL: () => WorkflowDefinition;
+  setExecutionStatus: (
+    status: WorkflowState["execution"]["status"],
+    detail?: { activeStepId?: string; failedStepId?: string }
+  ) => void;
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
-    workflow: { steps: [] },
-    edges: [],
+  workflow: { steps: [] },
+  branchTargets: {},
+  collapsedStepIds: [],
+  execution: { status: "idle" },
+  errors: [],
 
-    addStep: (type, position) => {
-        const id = uuid();
-        set((state) => ({
-            workflow: {
-                steps: [
-                    ...state.workflow.steps,
-                    {
-                        id: id,
-                        type: type as any,
-                        config: {},
-                        position,
-                    },
-                ],
+  addStep: (type) => get().insertStepAt(get().workflow.steps.length, type),
+
+  insertStepAt: (index, type) => {
+    const step = createStep(uuid(), type);
+    set((state) => {
+      const steps = [...state.workflow.steps];
+      steps.splice(index, 0, step);
+      return {
+        workflow: { steps },
+        selectedStepId: step.id,
+        errors: [],
+      };
+    });
+    return step.id;
+  },
+
+  updateStepConfig: (id, type, config) =>
+    set((state) => ({
+      workflow: {
+        steps: state.workflow.steps.map((step) =>
+          step.id === id && step.type === type ? ({ ...step, config } as Step) : step
+        ),
+      },
+      errors: [],
+    })),
+
+  updateStep: (id, updates) =>
+    set((state) => ({
+      workflow: {
+        steps: state.workflow.steps.map((step) =>
+          step.id === id ? ({ ...step, ...updates } as Step) : step
+        ),
+      },
+      errors: [],
+    })),
+
+  moveStep: (fromIndex, toIndex) =>
+    set((state) => {
+      if (fromIndex === toIndex) return state;
+      const steps = [...state.workflow.steps];
+      const [moved] = steps.splice(fromIndex, 1);
+      if (!moved) return state;
+      steps.splice(toIndex, 0, moved);
+      return { workflow: { steps }, errors: [] };
+    }),
+
+  duplicateStep: (id) =>
+    set((state) => {
+      const index = state.workflow.steps.findIndex((step) => step.id === id);
+      if (index < 0) return state;
+      const source = state.workflow.steps[index];
+      const copy = cloneStep(source, uuid());
+      const steps = [...state.workflow.steps];
+      steps.splice(index + 1, 0, copy);
+      return {
+        workflow: { steps },
+        selectedStepId: copy.id,
+        errors: [],
+      };
+    }),
+
+  deleteStep: (id) =>
+    set((state) => {
+      const steps = state.workflow.steps.filter((step) => step.id !== id);
+      const branchTargets = Object.fromEntries(
+        Object.entries(state.branchTargets)
+          .filter(([stepId]) => stepId !== id)
+          .map(([stepId, targets]) => [
+            stepId,
+            {
+              trueStepId: targets.trueStepId === id ? undefined : targets.trueStepId,
+              falseStepId: targets.falseStepId === id ? undefined : targets.falseStepId,
             },
-        }));
+          ])
+      );
+      return {
+        workflow: { steps },
+        branchTargets,
+        selectedStepId: state.selectedStepId === id ? steps[0]?.id : state.selectedStepId,
+        collapsedStepIds: state.collapsedStepIds.filter((stepId) => stepId !== id),
+        errors: [],
+      };
+    }),
 
-        return id;
-    },
+  selectStep: (id) => set({ selectedStepId: id }),
 
-    updatePosition: (id, position) =>
-        set((state) => ({
-            workflow: {
-                steps: state.workflow.steps.map((s) =>
-                    s.id === id ? { ...s, position } : s
-                ),
-            },
-        })),
+  toggleCollapsed: (id) =>
+    set((state) => ({
+      collapsedStepIds: state.collapsedStepIds.includes(id)
+        ? state.collapsedStepIds.filter((stepId) => stepId !== id)
+        : [...state.collapsedStepIds, id],
+    })),
 
-    connectSteps: (source, target, type) =>
-        set((state) => ({
-            edges: [
-                ...state.edges,
-                {
-                    id: uuid(),
-                    source,
-                    target,
-                    type,
-                },
-            ],
-        })),
+  setBranchTarget: (id, branch, targetId) =>
+    set((state) => ({
+      branchTargets: {
+        ...state.branchTargets,
+        [id]: {
+          ...state.branchTargets[id],
+          [branch]: targetId || undefined,
+        },
+      },
+      errors: [],
+    })),
 
-    deleteStep: (id) =>
-        set((state) => ({
-            workflow: {
-                steps: state.workflow.steps.filter((s) => s.id !== id),
-            },
-            edges: state.edges.filter(
-                (e) => e.source !== id && e.target !== id
-            ),
-        })),
+  loadTemplate: (template) =>
+    set({
+      workflow: { steps: template.steps.map((step) => cloneStep(step, step.id)) },
+      branchTargets: template.branchTargets ?? {},
+      selectedStepId: template.steps[0]?.id,
+      collapsedStepIds: [],
+      execution: { status: "idle" },
+      errors: [],
+    }),
 
-    deleteEdge: (id) =>
-        set((state) => ({
-            edges: state.edges.filter((e) => e.id !== id),
-        })),
+  validate: () => {
+    const issues = validateWorkflow(get().workflow.steps, get().branchTargets);
+    set({ errors: issues });
+    return issues;
+  },
 
-    selectStep: (id) => set({ selectedStepId: id }),
+  buildDSL: () => {
+    const { workflow, branchTargets } = get();
+    const steps = workflow.steps.map((step, index) => {
+      const nextStepId = workflow.steps[index + 1]?.id;
+      const base = cloneStep(step, step.id);
 
-    buildDSL: () => {
-        const { workflow, edges } = get();
-
-        const map: Record<string, any> = {};
-
-        edges.forEach((e) => {
-            if (!map[e.source]) map[e.source] = {};
-
-            if (e.type === "true") map[e.source].next_true = e.target;
-            else if (e.type === "false") map[e.source].next_false = e.target;
-            else map[e.source].next = e.target;
-        });
-
+      if (base.type === "condition") {
+        const targets = branchTargets[base.id] ?? {};
         return {
-            steps: workflow.steps.map((s) => ({
-                id: s.id,
-                type: s.type,
-                config: s.config,
-                ...map[s.id],
-            })),
+          ...base,
+          next: undefined,
+          next_true: targets.trueStepId,
+          next_false: targets.falseStepId,
         };
-    },
+      }
+
+      const shouldStopBeforeNext =
+        nextStepId && areSiblingBranchTargets(base.id, nextStepId, branchTargets);
+
+      return {
+        ...base,
+        next: shouldStopBeforeNext ? undefined : nextStepId,
+        next_true: undefined,
+        next_false: undefined,
+      };
+    });
+
+    return { steps };
+  },
+
+  setExecutionStatus: (status, detail) =>
+    set({
+      execution: {
+        status,
+        activeStepId: detail?.activeStepId,
+        failedStepId: detail?.failedStepId,
+      },
+    }),
 }));
+
+function cloneStep(step: Step, id: string): Step {
+  return {
+    ...step,
+    id,
+    config: cloneConfig(step.config),
+  } as Step;
+}
+
+function cloneConfig<T extends StepConfig>(config: T): T {
+  return JSON.parse(JSON.stringify(config)) as T;
+}
+
+function areSiblingBranchTargets(
+  currentStepId: string,
+  nextStepId: string,
+  branchTargets: Record<string, BranchTargets>
+) {
+  return Object.values(branchTargets).some((targets) => {
+    const siblingIds = [targets.trueStepId, targets.falseStepId];
+    return siblingIds.includes(currentStepId) && siblingIds.includes(nextStepId);
+  });
+}

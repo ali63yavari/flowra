@@ -1,113 +1,158 @@
-export interface Edge {
-    id: string;
-    source: string;
-    target: string;
+import type { BranchTargets, Step, ValidationIssue } from "@/lib/types";
+
+const templateRegex = /\{\{\s*([^}]+?)\s*\}\}/g;
+
+export function collectTemplateRefs(value: string): string[] {
+  return Array.from(value.matchAll(templateRegex), (match) => match[1].trim());
 }
 
-export interface ValidationError {
-    type: "node" | "edge" | "graph";
-    id?: string; // nodeId or edgeId
-    message: string;
+function valuesFromConfig(step: Step): string[] {
+  switch (step.type) {
+    case "http_request":
+      return [
+        step.config.url,
+        step.config.csrf_fetch_url,
+        step.config.csrf_selector,
+        step.config.csrf_field_name,
+        ...Object.values(step.config.headers),
+        ...Object.values(step.config.body),
+      ];
+    case "extract":
+      return Object.values(step.config.rules);
+    case "condition":
+      return [step.config.field, step.config.value];
+    case "form_submit":
+      return [
+        step.config.form_selector,
+        step.config.base_url,
+        ...Object.values(step.config.overrides),
+      ];
+    case "browser":
+      return step.config.actions.flatMap((action) => [
+        action.url ?? "",
+        action.selector ?? "",
+        action.value ?? "",
+      ]);
+  }
 }
 
-export function validateGraph(
-    steps: { id: string }[],
-    edges: Edge[]
-): ValidationError[] {
-    const errors: ValidationError[] = [];
+export function validateWorkflow(
+  steps: Step[],
+  branchTargets: Record<string, BranchTargets>
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const stepIds = new Set(steps.map((step) => step.id));
+  const extractNamesByIndex: Array<Set<string>> = [];
+  const seenExtractNames = new Set<string>();
 
-    const incoming: Record<string, number> = {};
-    const outgoing: Record<string, number> = {};
-    const adj: Record<string, string[]> = {};
+  steps.forEach((step, index) => {
+    extractNamesByIndex[index] = new Set(seenExtractNames);
+    if (step.type === "extract") {
+      Object.keys(step.config.rules).forEach((name) => seenExtractNames.add(name));
+    }
+  });
 
-    steps.forEach((s) => {
-        incoming[s.id] = 0;
-        outgoing[s.id] = 0;
-        adj[s.id] = [];
+  if (steps.length === 0) {
+    issues.push({
+      severity: "error",
+      type: "workflow",
+      message: "Add at least one workflow step before running.",
     });
+    return issues;
+  }
 
-    edges.forEach((e) => {
-        if (!incoming[e.target] && incoming[e.target] !== 0) return;
-        incoming[e.target]++;
-        outgoing[e.source]++;
-        adj[e.source].push(e.target);
+  steps.forEach((step, index) => {
+    switch (step.type) {
+      case "http_request":
+        if (!step.config.url.trim()) {
+          issues.push(stepError(step.id, "url", "HTTP request URL is required."));
+        }
+        if (!step.config.method) {
+          issues.push(stepError(step.id, "method", "HTTP method is required."));
+        }
+        break;
+      case "extract":
+        if (index === 0) {
+          issues.push(stepWarning(step.id, "rules", "Extract needs a previous response to read from."));
+        }
+        if (Object.keys(step.config.rules).length === 0) {
+          issues.push(stepError(step.id, "rules", "Add at least one extraction rule."));
+        }
+        Object.entries(step.config.rules).forEach(([name, selector]) => {
+          if (!name.trim() || !selector.trim()) {
+            issues.push(stepError(step.id, "rules", "Extraction rules need both a name and selector."));
+          }
+        });
+        break;
+      case "condition": {
+        if (!step.config.field.trim()) {
+          issues.push(stepError(step.id, "field", "Condition field is required."));
+        }
+        if (step.config.op !== "equals") {
+          issues.push(stepError(step.id, "op", "Only equals is supported by the backend today."));
+        }
+        const targets = branchTargets[step.id] ?? {};
+        if (!targets.trueStepId || !stepIds.has(targets.trueStepId)) {
+          issues.push(stepError(step.id, "next_true", "Choose a valid true branch target."));
+        }
+        if (!targets.falseStepId || !stepIds.has(targets.falseStepId)) {
+          issues.push(stepError(step.id, "next_false", "Choose a valid false branch target."));
+        }
+        if (targets.trueStepId && targets.trueStepId === targets.falseStepId) {
+          issues.push(stepWarning(step.id, "branches", "True and false branches point to the same step."));
+        }
+        break;
+      }
+      case "form_submit":
+        if (!step.config.form_selector.trim()) {
+          issues.push(stepError(step.id, "form_selector", "Form selector is required."));
+        }
+        break;
+      case "browser":
+        if (step.config.actions.length === 0) {
+          issues.push(stepError(step.id, "actions", "Add at least one browser action."));
+        }
+        step.config.actions.forEach((action) => {
+          if (action.type === "navigate" && !action.url?.trim()) {
+            issues.push(stepError(step.id, "url", "Navigate actions need a URL."));
+          }
+          if (["fill", "click", "wait"].includes(action.type) && !action.selector?.trim()) {
+            issues.push(stepError(step.id, "selector", `${action.type} actions need a selector.`));
+          }
+          if (action.type === "fill" && !action.value?.trim()) {
+            issues.push(stepError(step.id, "value", "Fill actions need a value."));
+          }
+        });
+        break;
+    }
+
+    valuesFromConfig(step).forEach((value) => {
+      collectTemplateRefs(value).forEach((ref) => {
+        const [namespace, key] = ref.split(".");
+        if (!namespace || !key) {
+          issues.push(stepError(step.id, "variables", `Invalid variable reference: {{${ref}}}.`));
+          return;
+        }
+        if (!["input", "extract", "var"].includes(namespace)) {
+          issues.push(stepError(step.id, "variables", `Unsupported variable namespace: ${namespace}.`));
+          return;
+        }
+        if (namespace === "extract" && !extractNamesByIndex[index]?.has(key)) {
+          issues.push(
+            stepError(step.id, "variables", `Unknown extracted value before this step: ${key}.`)
+          );
+        }
+      });
     });
+  });
 
-    // Rule 1: exactly one start node
-    const startNodes = steps.filter((s) => incoming[s.id] === 0);
-    if (startNodes.length === 0) {
-        errors.push({
-            type: "graph",
-            message: "No start node (node with no incoming edges).",
-        });
-    }
-    if (startNodes.length > 1) {
-        errors.push({
-            type: "graph",
-            message: "Multiple start nodes detected.",
-        });
-    }
+  return issues;
+}
 
-    // Rule 2: at most one outgoing edge
-    Object.entries(outgoing).forEach(([id, count]) => {
-        if (count > 1) {
-            errors.push({
-                type: "node",
-                id,
-                message: "Node has multiple outgoing edges.",
-            });
-        }
-    });
+function stepError(stepId: string, field: string, message: string): ValidationIssue {
+  return { severity: "error", type: "field", stepId, field, message };
+}
 
-    // Rule 3: cycle detection (DFS)
-    const visited: Record<string, number> = {}; // 0=unvisited,1=visiting,2=done
-
-    function dfs(node: string): boolean {
-        if (visited[node] === 1) return true; // cycle
-        if (visited[node] === 2) return false;
-
-        visited[node] = 1;
-        for (const n of adj[node]) {
-            if (dfs(n)) return true;
-        }
-        visited[node] = 2;
-        return false;
-    }
-
-    for (const s of steps) {
-        if (!visited[s.id]) {
-            if (dfs(s.id)) {
-                errors.push({
-                    type: "graph",
-                    message: "Cycle detected in workflow.",
-                });
-                break;
-            }
-        }
-    }
-
-    // Rule 4: reachability
-    if (startNodes.length === 1) {
-        const reachable = new Set<string>();
-        const stack = [startNodes[0].id];
-
-        while (stack.length) {
-            const cur = stack.pop()!;
-            if (reachable.has(cur)) continue;
-            reachable.add(cur);
-            adj[cur].forEach((n) => stack.push(n));
-        }
-
-        steps.forEach((s) => {
-            if (!reachable.has(s.id)) {
-                errors.push({
-                    type: "node",
-                    id: s.id,
-                    message: "Node is not connected to workflow.",
-                });
-            }
-        });
-    }
-
-    return errors;
+function stepWarning(stepId: string, field: string, message: string): ValidationIssue {
+  return { severity: "warning", type: "field", stepId, field, message };
 }

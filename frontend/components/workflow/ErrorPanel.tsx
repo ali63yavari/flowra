@@ -1,5 +1,6 @@
 "use client";
 
+import { IconButton } from "@/components/ui/IconButton";
 import { useWorkflowStore } from "@/store/workflowStore";
 
 export default function ErrorPanel() {
@@ -19,13 +20,7 @@ export default function ErrorPanel() {
             {blocking.length} errors, {warnings.length} warnings
           </h2>
         </div>
-        <button
-          type="button"
-          onClick={() => validate()}
-          className="rounded border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-        >
-          Check
-        </button>
+        <IconButton label="Validate workflow" icon="check" onClick={() => validate()} />
       </div>
 
       <div className="max-h-60 overflow-y-auto p-4">

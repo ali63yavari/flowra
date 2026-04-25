@@ -26,7 +26,7 @@ export default function WorkflowCanvas() {
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Graph preview</p>
         <h2 className="mt-1 text-sm font-semibold text-slate-950">Read-only projection</h2>
       </div>
-      <div className="h-[360px]">
+      <div className="h-[640px] min-h-0">
         {steps.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-slate-500">
             Add a step to see the graph.

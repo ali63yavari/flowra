@@ -53,10 +53,13 @@ interface WorkflowState {
   deleteStep: (id: string) => void;
   selectStep: (id?: string) => void;
   toggleCollapsed: (id: string) => void;
+  collapseAllSteps: () => void;
+  expandAllSteps: () => void;
   setBranchTarget: (id: string, branch: keyof BranchTargets, targetId: string) => void;
   loadTemplate: (template: WorkflowTemplate) => void;
   validate: () => ValidationIssue[];
   buildDSL: () => WorkflowDefinition;
+  buildDSLUntilStep: (stepId: string) => WorkflowDefinition;
   setExecutionStatus: (
     status: WorkflowExecutionState["status"],
     detail?: { activeStepId?: string; failedStepId?: string }
@@ -263,38 +266,41 @@ export const useWorkflowStore = create<WorkflowState>()(
         set((state) => {
           const steps = [...state.workflow.steps];
           steps.splice(index, 0, step);
+          const workflow = { steps };
           return syncActiveWorkflow(state, {
-            workflow: { steps },
+            workflow,
             selectedStepId: step.id,
-            errors: [],
+            errors: validateWorkflow(workflow.steps, state.branchTargets),
           });
         });
         return step.id;
       },
 
       updateStepConfig: (id, type, config) =>
-        set((state) =>
-          syncActiveWorkflow(state, {
-            workflow: {
-              steps: state.workflow.steps.map((step) =>
-                step.id === id && step.type === type ? ({ ...step, config } as Step) : step
-              ),
-            },
-            errors: [],
-          })
-        ),
+        set((state) => {
+          const workflow = {
+            steps: state.workflow.steps.map((step) =>
+              step.id === id && step.type === type ? ({ ...step, config } as Step) : step
+            ),
+          };
+          return syncActiveWorkflow(state, {
+            workflow,
+            errors: validateWorkflow(workflow.steps, state.branchTargets),
+          });
+        }),
 
       updateStep: (id, updates) =>
-        set((state) =>
-          syncActiveWorkflow(state, {
-            workflow: {
-              steps: state.workflow.steps.map((step) =>
-                step.id === id ? ({ ...step, ...updates } as Step) : step
-              ),
-            },
-            errors: [],
-          })
-        ),
+        set((state) => {
+          const workflow = {
+            steps: state.workflow.steps.map((step) =>
+              step.id === id ? ({ ...step, ...updates } as Step) : step
+            ),
+          };
+          return syncActiveWorkflow(state, {
+            workflow,
+            errors: validateWorkflow(workflow.steps, state.branchTargets),
+          });
+        }),
 
       moveStep: (fromIndex, toIndex) =>
         set((state) => {
@@ -303,7 +309,11 @@ export const useWorkflowStore = create<WorkflowState>()(
           const [moved] = steps.splice(fromIndex, 1);
           if (!moved) return state;
           steps.splice(toIndex, 0, moved);
-          return syncActiveWorkflow(state, { workflow: { steps }, errors: [] });
+          const workflow = { steps };
+          return syncActiveWorkflow(state, {
+            workflow,
+            errors: validateWorkflow(workflow.steps, state.branchTargets),
+          });
         }),
 
       duplicateStep: (id) =>
@@ -314,10 +324,11 @@ export const useWorkflowStore = create<WorkflowState>()(
           const copy = cloneStep(source, uuid());
           const steps = [...state.workflow.steps];
           steps.splice(index + 1, 0, copy);
+          const workflow = { steps };
           return syncActiveWorkflow(state, {
-            workflow: { steps },
+            workflow,
             selectedStepId: copy.id,
-            errors: [],
+            errors: validateWorkflow(workflow.steps, state.branchTargets),
           });
         }),
 
@@ -335,12 +346,15 @@ export const useWorkflowStore = create<WorkflowState>()(
                 },
               ])
           );
+          const workflow = { steps };
           return syncActiveWorkflow(state, {
-            workflow: { steps },
+            workflow: {
+              steps,
+            },
             branchTargets,
             selectedStepId: state.selectedStepId === id ? steps[0]?.id : state.selectedStepId,
             collapsedStepIds: state.collapsedStepIds.filter((stepId) => stepId !== id),
-            errors: [],
+            errors: validateWorkflow(workflow.steps, branchTargets),
           });
         }),
 
@@ -355,19 +369,34 @@ export const useWorkflowStore = create<WorkflowState>()(
           })
         ),
 
-      setBranchTarget: (id, branch, targetId) =>
+      collapseAllSteps: () =>
         set((state) =>
           syncActiveWorkflow(state, {
-            branchTargets: {
-              ...state.branchTargets,
-              [id]: {
-                ...state.branchTargets[id],
-                [branch]: targetId || undefined,
-              },
-            },
-            errors: [],
+            collapsedStepIds: state.workflow.steps.map((step) => step.id),
           })
         ),
+
+      expandAllSteps: () =>
+        set((state) =>
+          syncActiveWorkflow(state, {
+            collapsedStepIds: [],
+          })
+        ),
+
+      setBranchTarget: (id, branch, targetId) =>
+        set((state) => {
+          const branchTargets = {
+            ...state.branchTargets,
+            [id]: {
+              ...state.branchTargets[id],
+              [branch]: targetId || undefined,
+            },
+          };
+          return syncActiveWorkflow(state, {
+            branchTargets,
+            errors: validateWorkflow(state.workflow.steps, branchTargets),
+          });
+        }),
 
       loadTemplate: (template) => {
         const state = get();
@@ -408,32 +437,14 @@ export const useWorkflowStore = create<WorkflowState>()(
 
       buildDSL: () => {
         const { workflow, branchTargets } = get();
-        const steps = workflow.steps.map((step, index) => {
-          const nextStepId = workflow.steps[index + 1]?.id;
-          const base = cloneStep(step, step.id);
+        return buildDSLFromSteps(workflow.steps, branchTargets);
+      },
 
-          if (base.type === "condition") {
-            const targets = branchTargets[base.id] ?? {};
-            return {
-              ...base,
-              next: undefined,
-              next_true: targets.trueStepId,
-              next_false: targets.falseStepId,
-            };
-          }
-
-          const shouldStopBeforeNext =
-            nextStepId && areSiblingBranchTargets(base.id, nextStepId, branchTargets);
-
-          return {
-            ...base,
-            next: shouldStopBeforeNext ? undefined : nextStepId,
-            next_true: undefined,
-            next_false: undefined,
-          };
-        });
-
-        return { steps };
+      buildDSLUntilStep: (stepId) => {
+        const { workflow, branchTargets } = get();
+        const stepIndex = workflow.steps.findIndex((step) => step.id === stepId);
+        if (stepIndex < 0) return { steps: [] };
+        return buildDSLFromSteps(workflow.steps.slice(0, stepIndex + 1), branchTargets);
       },
 
       setExecutionStatus: (status, detail) =>
@@ -459,7 +470,7 @@ export const useWorkflowStore = create<WorkflowState>()(
         ),
     }),
     {
-      name: "flowra-workspace-v2",
+      name: "flowra-workspace-v3",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         collections: state.collections,
@@ -478,8 +489,71 @@ export const useWorkflowStore = create<WorkflowState>()(
 );
 
 function createInitialWorkspace() {
-  const collection = makeCollection("Default collection");
-  const workflow = makeWorkflow(collection.id, "Untitled workflow");
+  const collection = makeCollection("Demo collection");
+  const sampleSteps: Step[] = [
+    {
+      id: "demo-extract-first",
+      type: "extract",
+      config: {
+        format: "html",
+        rules: {
+          token: "",
+          status: ".status",
+        },
+      },
+    },
+    {
+      id: "demo-login-request",
+      type: "http_request",
+      config: {
+        method: "POST",
+        url: "",
+        headers: {
+          Authorization: "{{steps.login.token}}",
+        },
+        body: {
+          email: "{{input.email}}",
+          token: "{{extract.missingToken}}",
+        },
+        csrf_fetch_url: "",
+        csrf_selector: "",
+        csrf_field_name: "",
+      },
+    },
+    {
+      id: "demo-condition",
+      type: "condition",
+      config: {
+        field: "",
+        op: "equals",
+        value: "ready",
+      },
+    },
+    {
+      id: "demo-form-submit",
+      type: "form_submit",
+      config: {
+        form_selector: "",
+        base_url: "https://legacy.example.test",
+        overrides: {
+          session: "{{extract.token}}",
+        },
+      },
+    },
+  ];
+  const sampleBranchTargets = {
+    "demo-condition": {
+      trueStepId: "demo-form-submit",
+    },
+  };
+  const sampleErrors = validateWorkflow(sampleSteps, sampleBranchTargets);
+  const workflow = makeWorkflow(collection.id, "Validation display sample", {
+    description: "Shows inline warnings and errors directly on request-step cards.",
+    workflow: { steps: sampleSteps },
+    branchTargets: sampleBranchTargets,
+    selectedStepId: sampleSteps[0].id,
+    errors: sampleErrors,
+  });
   collection.workflowIds = [workflow.id];
 
   return {
@@ -603,6 +677,39 @@ function cloneStep(step: Step, id: string): Step {
 
 function cloneConfig<T extends StepConfig>(config: T): T {
   return JSON.parse(JSON.stringify(config)) as T;
+}
+
+function buildDSLFromSteps(
+  sourceSteps: Step[],
+  branchTargets: Record<string, BranchTargets>
+): WorkflowDefinition {
+  const stepIds = new Set(sourceSteps.map((step) => step.id));
+  const steps = sourceSteps.map((step, index) => {
+    const nextStepId = sourceSteps[index + 1]?.id;
+    const base = cloneStep(step, step.id);
+
+    if (base.type === "condition") {
+      const targets = branchTargets[base.id] ?? {};
+      return {
+        ...base,
+        next: undefined,
+        next_true: targets.trueStepId && stepIds.has(targets.trueStepId) ? targets.trueStepId : undefined,
+        next_false: targets.falseStepId && stepIds.has(targets.falseStepId) ? targets.falseStepId : undefined,
+      };
+    }
+
+    const shouldStopBeforeNext =
+      nextStepId && areSiblingBranchTargets(base.id, nextStepId, branchTargets);
+
+    return {
+      ...base,
+      next: shouldStopBeforeNext ? undefined : nextStepId,
+      next_true: undefined,
+      next_false: undefined,
+    };
+  });
+
+  return { steps };
 }
 
 function areSiblingBranchTargets(

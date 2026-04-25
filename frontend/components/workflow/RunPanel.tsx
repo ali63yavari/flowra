@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { IconButton } from "@/components/ui/IconButton";
 import { useExecute } from "@/hooks/useExecute";
 import { useWorkflowStore } from "@/store/workflowStore";
 
 export default function RunPanel() {
   const { run, loading, status, result, error, lastWorkflow } = useExecute();
   const activeWorkflowId = useWorkflowStore((s) => s.activeWorkflowId);
-  const validate = useWorkflowStore((s) => s.validate);
   const errors = useWorkflowStore((s) => s.errors);
   const [inputText, setInputText] = useState('{\n  "email": "test@test.com",\n  "password": "123456"\n}');
   const [inputError, setInputError] = useState<string | null>(null);
@@ -36,21 +36,13 @@ export default function RunPanel() {
           <h2 className="mt-1 text-sm font-semibold text-slate-950">Status: {status}</h2>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => validate()}
-            className="rounded border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Validate
-          </button>
-          <button
-            type="button"
+          <IconButton
+            label={loading ? "Workflow is running" : "Run workflow"}
+            icon="play"
+            tone="success"
             onClick={handleRun}
             disabled={loading || hasBlockingErrors || !activeWorkflowId}
-            className="rounded bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            {loading ? "Running" : "Run workflow"}
-          </button>
+          />
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "@/components/ui/IconButton";
 import { nodeMeta, stepTypeOrder } from "@/lib/nodeMeta";
 import type { StepType } from "@/lib/types";
 
@@ -13,17 +14,20 @@ export default function InsertBar({ onInsert }: { onInsert: (type: StepType) => 
   };
 
   return (
-    <div className="relative py-2">
+    <div className="relative -ml-8 -mr-5 h-4 opacity-0 transition hover:opacity-100 focus-within:opacity-100 group-hover/step:opacity-100">
+      <div className="absolute left-4 right-0 top-1/2 border-t border-dashed border-slate-300" />
       <button
         type="button"
+        aria-label="Add step"
+        title="Add step"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-center rounded border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-500 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+        className="absolute left-0 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 [&_svg]:h-3 [&_svg]:w-3"
       >
-        Add step
+        <Icon name="plus" />
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-20 overflow-hidden rounded border border-slate-200 bg-white shadow-lg">
+        <div className="absolute left-0 top-full z-20 w-72 overflow-hidden rounded border border-slate-200 bg-white shadow-lg">
           {stepTypeOrder.map((type) => {
             const meta = nodeMeta[type];
             return (

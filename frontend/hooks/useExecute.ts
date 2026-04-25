@@ -5,6 +5,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 
 export function useExecute() {
   const buildDSL = useWorkflowStore((s) => s.buildDSL);
+  const buildDSLUntilStep = useWorkflowStore((s) => s.buildDSLUntilStep);
   const validate = useWorkflowStore((s) => s.validate);
   const execution = useWorkflowStore((s) => s.execution);
   const setExecutionStatus = useWorkflowStore((s) => s.setExecutionStatus);
@@ -46,8 +47,34 @@ export function useExecute() {
     }
   };
 
+  const runStep = async (stepId: string, input: ExecutionInput = {}) => {
+    setExecutionStatus("running", { activeStepId: stepId });
+    setExecutionResult({ result: null, error: null });
+
+    try {
+      const workflow = buildDSLUntilStep(stepId);
+      setExecutionResult({ lastWorkflow: workflow });
+      const res = await executeDirect(workflow, input);
+
+      if (res.status === "error") {
+        setExecutionResult({ error: res.error, result: null });
+        setExecutionStatus("failed", { failedStepId: stepId });
+      } else {
+        setExecutionResult({ result: res.data, error: null });
+        setExecutionStatus("success");
+      }
+    } catch (e: unknown) {
+      setExecutionResult({
+        error: e instanceof Error ? e.message : "Execution failed.",
+        result: null,
+      });
+      setExecutionStatus("failed", { failedStepId: stepId });
+    }
+  };
+
   return {
     run,
+    runStep,
     loading: execution.status === "validating" || execution.status === "running",
     status: execution.status,
     result: execution.result ?? null,

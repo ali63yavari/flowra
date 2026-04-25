@@ -1,5 +1,6 @@
 "use client";
 
+import { IconButton } from "@/components/ui/IconButton";
 import { nodeMeta } from "@/lib/nodeMeta";
 import type {
   BrowserAction,
@@ -47,7 +48,7 @@ export default function NodeEditor() {
         <p className="mt-1 text-sm leading-6 text-slate-600">{nodeMeta[step.type].description}</p>
       </div>
 
-      <div className="flex-1 space-y-5 overflow-y-auto p-5">
+      <div className="scrollbar-auto-hide flex-1 space-y-5 overflow-y-auto p-5">
         {stepIssues.length > 0 && (
           <div className="rounded border border-amber-200 bg-amber-50 p-3">
             <p className="text-sm font-semibold text-amber-900">Needs attention</p>
@@ -314,13 +315,14 @@ function BrowserEditor({
                 ))}
               </select>
             </label>
-            <button
-              type="button"
-              onClick={() => onChange({ actions: config.actions.filter((_, actionIndex) => actionIndex !== index) })}
-              className="mt-6 rounded border border-red-200 px-2 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
-            >
-              Remove
-            </button>
+            <div className="mt-6">
+              <IconButton
+                label="Remove browser action"
+                icon="trash"
+                tone="danger"
+                onClick={() => onChange({ actions: config.actions.filter((_, actionIndex) => actionIndex !== index) })}
+              />
+            </div>
           </div>
           <div className="mt-3 space-y-3">
             {action.type === "navigate" && (
@@ -349,13 +351,14 @@ function BrowserEditor({
           </div>
         </div>
       ))}
-      <button
-        type="button"
-        onClick={() => onChange({ actions: [...config.actions, { type: "navigate", url: "" }] })}
-        className="w-full rounded border border-dashed border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-      >
-        Add browser action
-      </button>
+      <div className="flex justify-center rounded border border-dashed border-slate-300 py-2">
+        <IconButton
+          label="Add browser action"
+          icon="plus"
+          tone="primary"
+          onClick={() => onChange({ actions: [...config.actions, { type: "navigate", url: "" }] })}
+        />
+      </div>
     </div>
   );
 }
@@ -424,13 +427,7 @@ function KeyValueEditor({
     <div className="rounded border border-slate-200 p-3">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-slate-950">{title}</p>
-        <button
-          type="button"
-          onClick={() => onChange({ ...value, "": "" })}
-          className="rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
-        >
-          Add
-        </button>
+        <IconButton label={`Add ${title}`} icon="plus" tone="primary" onClick={() => onChange({ ...value, "": "" })} />
       </div>
       <div className="mt-3 space-y-3">
         {entries.length === 0 && <p className="text-sm text-slate-500">No entries yet.</p>}
@@ -449,13 +446,12 @@ function KeyValueEditor({
                 onChange={(event) => updateEntry(index, key, event.target.value)}
                 className="input-control"
               />
-              <button
-                type="button"
+              <IconButton
+                label={`Remove ${title} row`}
+                icon="trash"
+                tone="danger"
                 onClick={() => onChange(Object.fromEntries(entries.filter((_, entryIndex) => entryIndex !== index)))}
-                className="rounded border border-red-200 px-2 text-xs font-medium text-red-700 hover:bg-red-50"
-              >
-                Remove
-              </button>
+              />
             </div>
             <VariableButtons
               variables={variables}

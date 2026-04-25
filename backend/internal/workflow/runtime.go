@@ -6,13 +6,12 @@ import (
 
 type Runtime struct {
 	HTTPClient httpclient.Client
-	// Future:
-	// Browser browser.Browser
-	// CredentialService security.CredentialService
 }
 
-func NewRuntime(httpClient httpclient.Client) *Runtime {
+func NewRuntime() *Runtime {
+	client := httpclient.NewCookieClient()
+
 	return &Runtime{
-		HTTPClient: httpClient,
+		HTTPClient: client,
 	}
 }

@@ -3,7 +3,6 @@ package execution
 import (
 	"context"
 
-	"flowra/internal/httpclient"
 	"flowra/internal/workflow"
 	"flowra/internal/workflow/steps"
 )
@@ -13,11 +12,8 @@ type Service struct {
 }
 
 func NewService() *Service {
-	httpClient := httpclient.NewDefaultClient()
+	runtime := workflow.NewRuntime()
 
-	runtime := workflow.NewRuntime(httpClient)
-
-	// Register steps
 	steps.RegisterAll()
 
 	return &Service{

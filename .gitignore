@@ -1,32 +1,137 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+##################################################
+# GLOBAL (applies to entire repo)
+##################################################
 
-# Test binary, built with `go test -c`
-*.test
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
 
-# Code coverage profiles and other test artifacts
-*.out
-coverage.*
-*.coverprofile
-profile.cov
+# Logs
+*.log
+logs/
+tmp/
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
-go.work
-go.work.sum
-
-# env file
+# Env files (keep templates only)
 .env
+.env.local
+.env.*.local
 
-# Editor/IDE
-# .idea/
-# .vscode/
+##################################################
+# BACKEND (Go - ./backend)
+##################################################
+
+/backend/bin/
+/backend/build/
+/backend/dist/
+
+# Go build artifacts
+/backend/*.exe
+/backend/*.exe~
+/backend/*.dll
+/backend/*.so
+/backend/*.dylib
+
+# Test binary
+/backend/*.test
+
+# Coverage
+/backend/coverage.out
+/backend/coverage.html
+
+# Vendor (optional: comment if you vendor deps)
+/backend/vendor/
+
+# Go workspace (if used)
+/backend/go.work
+/backend/go.work.sum
+
+# Air / live reload
+/backend/tmp/
+
+##################################################
+# DATABASE / MIGRATIONS (IMPORTANT)
+##################################################
+
+# DO NOT ignore migrations (you want these in git)
+# /migrations/
+
+# But ignore local DB files
+*.sqlite
+*.db
+
+##################################################
+# FRONTEND (Next.js - ./frontend)
+##################################################
+
+/frontend/node_modules/
+/frontend/.next/
+/frontend/out/
+/frontend/build/
+
+# Logs
+/frontend/npm-debug.log*
+/frontend/yarn-debug.log*
+/frontend/yarn-error.log*
+/frontend/pnpm-debug.log*
+
+# Env files
+/frontend/.env*
+!/frontend/.env.example
+
+# Next.js cache
+/frontend/.turbo/
+/frontend/.cache/
+
+# TypeScript
+/frontend/tsconfig.tsbuildinfo
+
+##################################################
+# PACKAGE MANAGERS
+##################################################
+
+# Lockfiles (keep ONE depending on your choice)
+# Uncomment based on your tool:
+
+# npm
+# package-lock.json
+
+# yarn
+# yarn.lock
+
+# pnpm
+# pnpm-lock.yaml
+
+##################################################
+# DOCKER / DEVOPS
+##################################################
+
+docker-compose.override.yml
+*.local.yml
+
+##################################################
+# TESTING / TEMP
+##################################################
+
+*.tmp
+*.temp
+
+##################################################
+# SECURITY
+##################################################
+
+# Never commit secrets
+secrets/
+*.key
+*.pem
+*.crt
+
+##################################################
+# MISC
+##################################################
+
+coverage/
+dist/

@@ -5,6 +5,7 @@ import { createStep } from "@/lib/stepDefaults";
 import { validateWorkflow } from "@/lib/validation";
 import type {
   BranchTargets,
+  ExecutionConsoleEntry,
   WorkflowExecutionState,
   Step,
   StepConfig,
@@ -12,6 +13,7 @@ import type {
   ValidationIssue,
   WorkflowDefinition,
   CollectionWorkflow,
+  EnvironmentVariableSet,
   WorkflowTemplate,
   WorkspaceCollection,
 } from "@/lib/types";
@@ -21,6 +23,7 @@ interface WorkflowState {
   workflows: Record<string, CollectionWorkflow>;
   activeCollectionId?: string;
   activeWorkflowId?: string;
+  variables: EnvironmentVariableSet;
 
   workflow: WorkflowDefinition;
   branchTargets: Record<string, BranchTargets>;
@@ -39,6 +42,16 @@ interface WorkflowState {
   duplicateWorkflow: (id: string) => void;
   deleteWorkflow: (id: string) => void;
   selectWorkflow: (id: string) => void;
+  createEnvironment: (name: string) => void;
+  renameEnvironment: (oldName: string, newName: string) => void;
+  deleteEnvironment: (name: string) => void;
+  setActiveEnvironment: (name: string) => void;
+  updateTenantVariables: (environment: string, variables: Record<string, string>) => void;
+  updateCollectionVariables: (
+    collectionId: string,
+    environment: string,
+    variables: Record<string, string>
+  ) => void;
 
   addStep: (type: StepType) => string;
   insertStepAt: (index: number, type: StepType) => string;
@@ -56,7 +69,7 @@ interface WorkflowState {
   collapseAllSteps: () => void;
   expandAllSteps: () => void;
   setBranchTarget: (id: string, branch: keyof BranchTargets, targetId: string) => void;
-  loadTemplate: (template: WorkflowTemplate) => void;
+  loadTemplate: (template: WorkflowTemplate, collectionId?: string) => void;
   validate: () => ValidationIssue[];
   buildDSL: () => WorkflowDefinition;
   buildDSLUntilStep: (stepId: string) => WorkflowDefinition;
@@ -69,6 +82,8 @@ interface WorkflowState {
     error?: string | null;
     lastWorkflow?: WorkflowDefinition | null;
   }) => void;
+  addConsoleEntry: (entry: Omit<ExecutionConsoleEntry, "id" | "createdAt">) => void;
+  clearConsoleEntries: () => void;
 }
 
 const defaultExecution: WorkflowExecutionState = {
@@ -76,6 +91,23 @@ const defaultExecution: WorkflowExecutionState = {
   result: null,
   error: null,
   lastWorkflow: null,
+  consoleEntries: [],
+};
+
+const defaultVariables: EnvironmentVariableSet = {
+  environments: ["dev", "prod"],
+  activeEnvironment: "dev",
+  tenant: {
+    dev: {
+      baseUrl: "https://dev.example.com",
+      apiKey: "dev-secret",
+    },
+    prod: {
+      baseUrl: "https://api.example.com",
+      apiKey: "prod-secret",
+    },
+  },
+  collections: {},
 };
 
 const initialWorkspace = createInitialWorkspace();
@@ -98,6 +130,7 @@ export const useWorkflowStore = create<WorkflowState>()(
 
         set((state) => ({
           collections: { ...state.collections, [id]: collection },
+          variables: addCollectionVariableScope(state.variables, id),
           activeCollectionId: id,
           activeWorkflowId: undefined,
           ...activeFieldsFromWorkflow(undefined),
@@ -124,6 +157,7 @@ export const useWorkflowStore = create<WorkflowState>()(
           if (!collection) return state;
           const collections = { ...state.collections };
           const workflows = { ...state.workflows };
+          const variables = removeCollectionVariableScope(state.variables, id);
           delete collections[id];
           collection.workflowIds.forEach((workflowId) => delete workflows[workflowId]);
 
@@ -139,6 +173,7 @@ export const useWorkflowStore = create<WorkflowState>()(
           return {
             collections,
             workflows,
+            variables,
             activeCollectionId: nextCollection.id,
             activeWorkflowId: nextWorkflow?.id,
             ...activeFieldsFromWorkflow(nextWorkflow),
@@ -258,6 +293,111 @@ export const useWorkflowStore = create<WorkflowState>()(
             ...activeFieldsFromWorkflow(workflow),
           };
         }),
+
+      createEnvironment: (name) =>
+        set((state) => {
+          const environmentName = sanitizeEnvironmentName(name);
+          if (!environmentName || state.variables.environments.includes(environmentName)) return state;
+          return {
+            variables: {
+              environments: [...state.variables.environments, environmentName],
+              activeEnvironment: environmentName,
+              tenant: { ...state.variables.tenant, [environmentName]: {} },
+              collections: Object.fromEntries(
+                Object.entries(state.variables.collections).map(([collectionId, environments]) => [
+                  collectionId,
+                  { ...environments, [environmentName]: {} },
+                ])
+              ),
+            },
+          };
+        }),
+
+      renameEnvironment: (oldName, newName) =>
+        set((state) => {
+          const environmentName = sanitizeEnvironmentName(newName);
+          if (
+            !environmentName ||
+            oldName === environmentName ||
+            !state.variables.environments.includes(oldName) ||
+            state.variables.environments.includes(environmentName)
+          ) {
+            return state;
+          }
+
+          return {
+            variables: {
+              environments: state.variables.environments.map((environment) =>
+                environment === oldName ? environmentName : environment
+              ),
+              activeEnvironment:
+                state.variables.activeEnvironment === oldName ? environmentName : state.variables.activeEnvironment,
+              tenant: renameEnvironmentRecord(state.variables.tenant, oldName, environmentName),
+              collections: Object.fromEntries(
+                Object.entries(state.variables.collections).map(([collectionId, environments]) => [
+                  collectionId,
+                  renameEnvironmentRecord(environments, oldName, environmentName),
+                ])
+              ),
+            },
+          };
+        }),
+
+      deleteEnvironment: (name) =>
+        set((state) => {
+          if (!state.variables.environments.includes(name) || state.variables.environments.length <= 1) return state;
+          const environments = state.variables.environments.filter((environment) => environment !== name);
+          const nextActiveEnvironment = environments.includes(state.variables.activeEnvironment)
+            ? state.variables.activeEnvironment
+            : environments[0];
+
+          return {
+            variables: {
+              environments,
+              activeEnvironment: nextActiveEnvironment ?? "dev",
+              tenant: omitEnvironmentRecord(state.variables.tenant, name),
+              collections: Object.fromEntries(
+                Object.entries(state.variables.collections).map(([collectionId, collectionEnvironments]) => [
+                  collectionId,
+                  omitEnvironmentRecord(collectionEnvironments, name),
+                ])
+              ),
+            },
+          };
+        }),
+
+      setActiveEnvironment: (name) =>
+        set((state) => {
+          if (!state.variables.environments.includes(name)) return state;
+          return {
+            variables: { ...state.variables, activeEnvironment: name },
+          };
+        }),
+
+      updateTenantVariables: (environment, variables) =>
+        set((state) => ({
+          variables: {
+            ...state.variables,
+            tenant: {
+              ...state.variables.tenant,
+              [environment]: variables,
+            },
+          },
+        })),
+
+      updateCollectionVariables: (collectionId, environment, variables) =>
+        set((state) => ({
+          variables: {
+            ...state.variables,
+            collections: {
+              ...state.variables.collections,
+              [collectionId]: {
+                ...(state.variables.collections[collectionId] ?? {}),
+                [environment]: variables,
+              },
+            },
+          },
+        })),
 
       addStep: (type) => get().insertStepAt(get().workflow.steps.length, type),
 
@@ -398,9 +538,9 @@ export const useWorkflowStore = create<WorkflowState>()(
           });
         }),
 
-      loadTemplate: (template) => {
+      loadTemplate: (template, targetCollectionId) => {
         const state = get();
-        const collectionId = state.activeCollectionId ?? Object.keys(state.collections)[0];
+        const collectionId = targetCollectionId ?? state.activeCollectionId ?? Object.keys(state.collections)[0];
         if (!collectionId) return;
         const workflow = makeWorkflow(collectionId, template.name, {
           description: template.description,
@@ -468,6 +608,33 @@ export const useWorkflowStore = create<WorkflowState>()(
             },
           })
         ),
+
+      addConsoleEntry: (entry) =>
+        set((state) =>
+          syncActiveWorkflow(state, {
+            execution: {
+              ...state.execution,
+              consoleEntries: [
+                {
+                  ...entry,
+                  id: uuid(),
+                  createdAt: new Date().toISOString(),
+                },
+                ...(state.execution.consoleEntries ?? []),
+              ].slice(0, 50),
+            },
+          })
+        ),
+
+      clearConsoleEntries: () =>
+        set((state) =>
+          syncActiveWorkflow(state, {
+            execution: {
+              ...state.execution,
+              consoleEntries: [],
+            },
+          })
+        ),
     }),
     {
       name: "flowra-workspace-v3",
@@ -483,6 +650,7 @@ export const useWorkflowStore = create<WorkflowState>()(
         collapsedStepIds: state.collapsedStepIds,
         execution: state.execution,
         errors: state.errors,
+        variables: state.variables,
       }),
     }
   )
@@ -559,6 +727,13 @@ function createInitialWorkspace() {
   return {
     collections: { [collection.id]: collection },
     workflows: { [workflow.id]: workflow },
+    variables: {
+      ...defaultVariables,
+      tenant: cloneVariableMaps(defaultVariables.tenant),
+      collections: {
+        [collection.id]: makeEmptyCollectionVariableScope(defaultVariables.environments),
+      },
+    },
     activeCollectionId: collection.id,
     activeWorkflowId: workflow.id,
     ...activeFieldsFromWorkflow(workflow),
@@ -574,6 +749,51 @@ function makeCollection(name: string): WorkspaceCollection {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function sanitizeEnvironmentName(name: string) {
+  return name.trim().replace(/\s+/g, "-").toLowerCase();
+}
+
+function makeEmptyCollectionVariableScope(environments: string[]) {
+  return Object.fromEntries(environments.map((environment) => [environment, {}]));
+}
+
+function addCollectionVariableScope(variables: EnvironmentVariableSet, collectionId: string) {
+  return {
+    ...variables,
+    collections: {
+      ...variables.collections,
+      [collectionId]: makeEmptyCollectionVariableScope(variables.environments),
+    },
+  };
+}
+
+function removeCollectionVariableScope(variables: EnvironmentVariableSet, collectionId: string) {
+  const collections = { ...variables.collections };
+  delete collections[collectionId];
+  return { ...variables, collections };
+}
+
+function renameEnvironmentRecord(
+  record: Record<string, Record<string, string>>,
+  oldName: string,
+  newName: string
+) {
+  const next = { ...record };
+  next[newName] = next[oldName] ?? {};
+  delete next[oldName];
+  return next;
+}
+
+function omitEnvironmentRecord(record: Record<string, Record<string, string>>, name: string) {
+  const next = { ...record };
+  delete next[name];
+  return next;
+}
+
+function cloneVariableMaps(record: Record<string, Record<string, string>>) {
+  return JSON.parse(JSON.stringify(record)) as Record<string, Record<string, string>>;
 }
 
 function makeWorkflow(
@@ -605,7 +825,11 @@ function activeFieldsFromWorkflow(workflow?: CollectionWorkflow) {
     branchTargets: workflow?.branchTargets ?? {},
     selectedStepId: workflow?.selectedStepId,
     collapsedStepIds: workflow?.collapsedStepIds ?? [],
-    execution: workflow?.execution ?? { ...defaultExecution },
+    execution: {
+      ...defaultExecution,
+      ...(workflow?.execution ?? {}),
+      consoleEntries: workflow?.execution?.consoleEntries ?? [],
+    },
     errors: workflow?.errors ?? [],
   };
 }

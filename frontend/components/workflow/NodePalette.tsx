@@ -56,9 +56,8 @@ export default function NodePalette({ collapsed = false }: { collapsed?: boolean
   };
 
   const handleCreateFromTemplate = (collectionId: string, templateId: string) => {
-    if (activeCollectionId !== collectionId) selectCollection(collectionId);
     const template = workflowTemplates.find((item) => item.id === templateId);
-    if (template) loadTemplate(template);
+    if (template) loadTemplate(template, collectionId);
     setExpandedIds((current) => [...new Set([...current, collectionId])]);
     setTemplateCollectionId(null);
   };

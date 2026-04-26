@@ -1,10 +1,12 @@
 "use client";
 
-import { IconButton } from "@/components/ui/IconButton";
+import { useEffect, useState } from "react";
+import { Icon, IconButton } from "@/components/ui/IconButton";
 import { nodeMeta } from "@/lib/nodeMeta";
 import type {
   BrowserAction,
   ConditionConfig,
+  EnvironmentVariableSet,
   ExtractConfig,
   FormSubmitConfig,
   HTTPRequestConfig,
@@ -20,12 +22,14 @@ export default function NodeEditor() {
   const selectedStepId = useWorkflowStore((s) => s.selectedStepId);
   const branchTargets = useWorkflowStore((s) => s.branchTargets);
   const errors = useWorkflowStore((s) => s.errors);
+  const activeCollectionId = useWorkflowStore((s) => s.activeCollectionId);
+  const variablesState = useWorkflowStore((s) => s.variables);
   const updateStepConfig = useWorkflowStore((s) => s.updateStepConfig);
   const setBranchTarget = useWorkflowStore((s) => s.setBranchTarget);
 
   const step = steps.find((candidate) => candidate.id === selectedStepId);
   const selectedIndex = steps.findIndex((candidate) => candidate.id === selectedStepId);
-  const variableRefs = buildVariableRefs(steps, selectedIndex);
+  const variableRefs = buildVariableRefs(steps, selectedIndex, variablesState, activeCollectionId);
 
   if (!step) {
     return (
@@ -47,7 +51,6 @@ export default function NodeEditor() {
         <h2 className="mt-1 text-lg font-semibold text-slate-950">{nodeMeta[step.type].label}</h2>
         <p className="mt-1 text-sm leading-6 text-slate-600">{nodeMeta[step.type].description}</p>
       </div>
-
       <div className="scrollbar-auto-hide flex-1 space-y-5 overflow-y-auto p-5">
         {stepIssues.length > 0 && (
           <div className="rounded border border-amber-200 bg-amber-50 p-3">
@@ -59,8 +62,6 @@ export default function NodeEditor() {
             </ul>
           </div>
         )}
-
-        <VariablePanel refs={variableRefs} />
 
         {step.type === "http_request" && (
           <HTTPRequestEditor
@@ -392,10 +393,107 @@ function VariableTextField({
   onChange: (value: string) => void;
 }) {
   return (
-    <div>
-      <TextField label={label} value={value} onChange={onChange} />
-      <VariableButtons variables={variables} onInsert={(variable) => onChange(`${value}${variable}`)} />
-    </div>
+    <VariableInput label={label} value={value} variables={variables} onChange={onChange} />
+  );
+}
+
+function VariableInput({
+  label,
+  value,
+  variables,
+  onChange,
+  placeholder,
+}: {
+  label?: string;
+  value: string;
+  variables: string[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const visibleVariables = variables.filter((variable) =>
+    variable.toLowerCase().includes(query.trim().toLowerCase())
+  );
+  const tooltip = buildVariableTooltip(value);
+
+  const updateValue = (nextValue: string) => {
+    onChange(nextValue);
+    if (nextValue.endsWith("{{")) {
+      setOpen(true);
+      setQuery("");
+    }
+  };
+
+  const insertVariable = (variable: string) => {
+    const nextValue = value.endsWith("{{")
+      ? `${value.slice(0, -2)}${variable}`
+      : `${value}${variable}`;
+    onChange(nextValue);
+    setOpen(false);
+    setQuery("");
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
+
+  return (
+    <label className="relative block">
+      {label ? <span className="field-label">{label}</span> : null}
+      <input
+        value={value}
+        placeholder={placeholder}
+        title={tooltip}
+        onChange={(event) => updateValue(event.target.value)}
+        className="input-control pr-9"
+      />
+      <button
+        type="button"
+        aria-label="Insert variable"
+        title="Insert variable"
+        onClick={() => setOpen((current) => !current)}
+        className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-blue-50 hover:text-blue-700"
+      >
+        <Icon name="braces" className="h-3.5 w-3.5" />
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-full z-[80] mt-1 w-72 overflow-hidden rounded border border-slate-200 bg-white shadow-xl">
+          <div className="border-b border-slate-200 p-2">
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search variables"
+              className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400"
+            />
+          </div>
+          <div className="max-h-56 overflow-auto p-1">
+            {visibleVariables.length ? (
+              visibleVariables.map((variable) => (
+                <button
+                  key={variable}
+                  type="button"
+                  onClick={() => insertVariable(variable)}
+                  className="block w-full rounded px-2 py-2 text-left hover:bg-slate-50"
+                >
+                  <code className="text-xs font-semibold text-slate-800">{variable}</code>
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    {describeVariable(variable)}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <p className="p-3 text-sm text-slate-500">No variables match your search.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </label>
   );
 }
 
@@ -415,6 +513,11 @@ function KeyValueEditor({
   onChange: (value: Record<string, string>) => void;
 }) {
   const entries = Object.entries(value);
+  const [mode, setMode] = useState<"rows" | "json" | "delimited">("rows");
+  const [importText, setImportText] = useState("");
+  const [keyValueSeparator, setKeyValueSeparator] = useState(":");
+  const [pairSeparator, setPairSeparator] = useState("\\n");
+  const [importError, setImportError] = useState<string | null>(null);
 
   const updateEntry = (index: number, key: string, entryValue: string) => {
     const nextEntries = entries.map(([currentKey, currentValue], entryIndex) =>
@@ -423,45 +526,194 @@ function KeyValueEditor({
     onChange(Object.fromEntries(nextEntries));
   };
 
+  const applyImport = () => {
+    try {
+      const imported =
+        mode === "json"
+          ? parseKeyValueJSON(importText)
+          : parseDelimitedKeyValues(importText, keyValueSeparator, pairSeparator);
+      onChange(imported);
+      setImportError(null);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Could not import key/value data.");
+    }
+  };
+
   return (
     <div className="rounded border border-slate-200 p-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-slate-950">{title}</p>
-        <IconButton label={`Add ${title}`} icon="plus" tone="primary" onClick={() => onChange({ ...value, "": "" })} />
-      </div>
-      <div className="mt-3 space-y-3">
-        {entries.length === 0 && <p className="text-sm text-slate-500">No entries yet.</p>}
-        {entries.map(([key, entryValue], index) => (
-          <div key={`${key}-${index}`} className="space-y-2">
-            <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-              <input
-                value={key}
-                placeholder={keyPlaceholder}
-                onChange={(event) => updateEntry(index, event.target.value, entryValue)}
-                className="input-control"
-              />
-              <input
-                value={entryValue}
-                placeholder={valuePlaceholder}
-                onChange={(event) => updateEntry(index, key, event.target.value)}
-                className="input-control"
-              />
-              <IconButton
-                label={`Remove ${title} row`}
-                icon="trash"
-                tone="danger"
-                onClick={() => onChange(Object.fromEntries(entries.filter((_, entryIndex) => entryIndex !== index)))}
-              />
-            </div>
-            <VariableButtons
-              variables={variables}
-              onInsert={(variable) => updateEntry(index, key, `${entryValue}${variable}`)}
-            />
+        <div className="flex items-center gap-2">
+          <div className="flex rounded border border-slate-200 bg-slate-50 p-0.5">
+            <KeyValueModeButton active={mode === "rows"} onClick={() => setMode("rows")}>
+              Rows
+            </KeyValueModeButton>
+            <KeyValueModeButton active={mode === "json"} onClick={() => setMode("json")}>
+              JSON
+            </KeyValueModeButton>
+            <KeyValueModeButton active={mode === "delimited"} onClick={() => setMode("delimited")}>
+              Text
+            </KeyValueModeButton>
           </div>
-        ))}
+          <IconButton label={`Add ${title}`} icon="plus" tone="primary" onClick={() => onChange({ ...value, "": "" })} />
+        </div>
       </div>
+
+      {mode === "rows" ? (
+        <div className="mt-3 space-y-3">
+          {entries.length === 0 && <p className="text-sm text-slate-500">No entries yet.</p>}
+          {entries.map(([key, entryValue], index) => (
+            <div key={`${key}-${index}`} className="space-y-2">
+              <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                <VariableInput
+                  value={key}
+                  placeholder={keyPlaceholder}
+                  variables={variables}
+                  onChange={(nextKey) => updateEntry(index, nextKey, entryValue)}
+                />
+                <VariableInput
+                  value={entryValue}
+                  placeholder={valuePlaceholder}
+                  variables={variables}
+                  onChange={(nextValue) => updateEntry(index, key, nextValue)}
+                />
+                <IconButton
+                  label={`Remove ${title} row`}
+                  icon="trash"
+                  tone="danger"
+                  onClick={() => onChange(Object.fromEntries(entries.filter((_, entryIndex) => entryIndex !== index)))}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 space-y-3">
+          {mode === "delimited" && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="block">
+                <span className="field-label">Key/value separator</span>
+                <input
+                  value={keyValueSeparator}
+                  onChange={(event) => setKeyValueSeparator(event.target.value)}
+                  placeholder=":"
+                  className="input-control"
+                />
+              </label>
+              <label className="block">
+                <span className="field-label">Pair separator</span>
+                <input
+                  value={pairSeparator}
+                  onChange={(event) => setPairSeparator(event.target.value)}
+                  placeholder="\\n"
+                  className="input-control"
+                />
+              </label>
+            </div>
+          )}
+          <label className="block">
+            <span className="field-label">
+              {mode === "json" ? "JSON object" : "Delimited key/value text"}
+            </span>
+            <textarea
+              value={importText}
+              onChange={(event) => setImportText(event.target.value)}
+              placeholder={
+                mode === "json"
+                  ? '{\n  "Authorization": "Bearer token"\n}'
+                  : "Authorization:Bearer token\\nContent-Type:application/json"
+              }
+              className="min-h-32 w-full rounded border border-slate-200 bg-white p-3 font-mono text-xs leading-5 text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+          {importError && <p className="text-sm text-red-700">{importError}</p>}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={applyImport}
+              className="rounded bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Import {title}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function KeyValueModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "rounded px-2 py-1 text-xs font-semibold transition",
+        active ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function parseKeyValueJSON(input: string): Record<string, string> {
+  const parsed = JSON.parse(input);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("JSON import must be an object.");
+  }
+  return Object.fromEntries(
+    Object.entries(parsed).map(([key, entryValue]) => [key, stringifyImportedValue(entryValue)])
+  );
+}
+
+function parseDelimitedKeyValues(
+  input: string,
+  keyValueSeparator: string,
+  pairSeparator: string
+): Record<string, string> {
+  const keySeparator = decodeSeparator(keyValueSeparator);
+  const rowSeparator = decodeSeparator(pairSeparator);
+  if (!keySeparator) throw new Error("Key/value separator is required.");
+  if (!rowSeparator) throw new Error("Pair separator is required.");
+
+  const pairs = input
+    .split(rowSeparator)
+    .map((pair) => pair.trim())
+    .filter(Boolean);
+
+  return Object.fromEntries(
+    pairs.map((pair) => {
+      const separatorIndex = pair.indexOf(keySeparator);
+      if (separatorIndex < 0) {
+        throw new Error(`Missing key/value separator in: ${pair}`);
+      }
+      const key = pair.slice(0, separatorIndex).trim();
+      const entryValue = pair.slice(separatorIndex + keySeparator.length).trim();
+      if (!key) throw new Error("Keys cannot be empty.");
+      return [key, entryValue];
+    })
+  );
+}
+
+function decodeSeparator(value: string) {
+  return value
+    .replaceAll("\\n", "\n")
+    .replaceAll("\\t", "\t");
+}
+
+function stringifyImportedValue(value: unknown) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
 }
 
 function BranchSelect({
@@ -490,52 +742,42 @@ function BranchSelect({
   );
 }
 
-function VariablePanel({ refs }: { refs: string[] }) {
-  return (
-    <div className="rounded border border-slate-200 bg-slate-50 p-3">
-      <p className="text-sm font-semibold text-slate-950">Available variables</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {refs.map((ref) => (
-          <code key={ref} className="rounded bg-white px-2 py-1 text-xs text-slate-700 ring-1 ring-slate-200">
-            {ref}
-          </code>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function VariableButtons({
-  variables,
-  onInsert,
-}: {
-  variables: string[];
-  onInsert: (variable: string) => void;
-}) {
-  if (variables.length === 0) return null;
-
-  return (
-    <div className="mt-2 flex flex-wrap gap-1">
-      {variables.slice(0, 8).map((variable) => (
-        <button
-          key={variable}
-          type="button"
-          onClick={() => onInsert(variable)}
-          className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
-        >
-          Insert {variable}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function buildVariableRefs(steps: Step[], selectedIndex: number): string[] {
+function buildVariableRefs(
+  steps: Step[],
+  selectedIndex: number,
+  variables: EnvironmentVariableSet,
+  activeCollectionId?: string
+): string[] {
   const refs = ["{{input.email}}", "{{input.password}}", "{{input.name}}", "{{input.message}}", "{{var.someKey}}"];
+  const activeEnvironment = variables.activeEnvironment;
+  const tenantVariables = variables.tenant[activeEnvironment] ?? {};
+  const collectionVariables = activeCollectionId
+    ? variables.collections[activeCollectionId]?.[activeEnvironment] ?? {}
+    : {};
+  Object.keys({ ...tenantVariables, ...collectionVariables }).forEach((name) => refs.push(`{{var.${name}}}`));
   steps.slice(0, Math.max(selectedIndex, 0)).forEach((step) => {
     if (step.type === "extract") {
       Object.keys(step.config.rules).forEach((name) => refs.push(`{{extract.${name}}}`));
     }
   });
   return Array.from(new Set(refs));
+}
+
+function buildVariableTooltip(value: string) {
+  const refs = extractVariableRefs(value);
+  if (!refs.length) return undefined;
+  return refs.map((ref) => `${ref}: ${describeVariable(ref)}`).join("\n");
+}
+
+function extractVariableRefs(value: string) {
+  return Array.from(value.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g), (match) => `{{${match[1].trim()}}}`);
+}
+
+function describeVariable(variable: string) {
+  const ref = variable.replace(/[{}]/g, "").trim();
+  const [namespace, key] = ref.split(".");
+  if (namespace === "input") return `Runtime input value for "${key}".`;
+  if (namespace === "extract") return `Extracted value "${key}" from a previous response.`;
+  if (namespace === "var") return `Tenant or environment variable "${key}".`;
+  return "Workflow variable.";
 }

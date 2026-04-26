@@ -5,7 +5,13 @@ import { Icon } from "@/components/ui/IconButton";
 import { nodeMeta, stepTypeOrder } from "@/lib/nodeMeta";
 import type { StepType } from "@/lib/types";
 
-export default function InsertBar({ onInsert }: { onInsert: (type: StepType) => void }) {
+export default function InsertBar({
+  onInsert,
+  alwaysVisible = false,
+}: {
+  onInsert: (type: StepType) => void;
+  alwaysVisible?: boolean;
+}) {
   const [open, setOpen] = useState(false);
 
   const handleInsert = (type: StepType) => {
@@ -14,7 +20,12 @@ export default function InsertBar({ onInsert }: { onInsert: (type: StepType) => 
   };
 
   return (
-    <div className="relative -ml-8 -mr-5 h-4 opacity-0 transition hover:opacity-100 focus-within:opacity-100 group-hover/step:opacity-100">
+    <div
+      className={[
+        "relative -ml-8 -mr-5 h-4 transition hover:opacity-100 focus-within:opacity-100 group-hover/step:opacity-100",
+        alwaysVisible ? "opacity-100" : "opacity-0",
+      ].join(" ")}
+    >
       <div className="absolute left-4 right-0 top-1/2 border-t border-dashed border-slate-300" />
       <button
         type="button"

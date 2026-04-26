@@ -72,7 +72,7 @@ export function validateWorkflow(
         }
         break;
       case "extract":
-        if (index === 0) {
+        if (index === 0 && Object.keys(step.config.rules).length === 0) {
           issues.push(stepWarning(step.id, "rules", "Extract needs a previous response to read from."));
         }
         if (Object.keys(step.config.rules).length === 0) {
@@ -92,10 +92,10 @@ export function validateWorkflow(
           issues.push(stepError(step.id, "op", "Only equals is supported by the backend today."));
         }
         const targets = branchTargets[step.id] ?? {};
-        if (!targets.trueStepId || !stepIds.has(targets.trueStepId)) {
+        if (targets.trueStepId && !stepIds.has(targets.trueStepId)) {
           issues.push(stepError(step.id, "next_true", "Choose a valid true branch target."));
         }
-        if (!targets.falseStepId || !stepIds.has(targets.falseStepId)) {
+        if (targets.falseStepId && !stepIds.has(targets.falseStepId)) {
           issues.push(stepError(step.id, "next_false", "Choose a valid false branch target."));
         }
         if (targets.trueStepId && targets.trueStepId === targets.falseStepId) {

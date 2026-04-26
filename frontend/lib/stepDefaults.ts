@@ -20,7 +20,7 @@ export function getDefaultConfig(type: StepType): StepConfig {
     case "http_request":
       return {
         method: "GET",
-        url: "",
+        url: "https://example.com",
         headers: {},
         body: {},
         csrf_fetch_url: "",
@@ -36,7 +36,7 @@ export function getDefaultConfig(type: StepType): StepConfig {
       return {
         field: "token",
         op: "equals",
-        value: "",
+        value: "success",
       };
     case "form_submit":
       return {
@@ -46,7 +46,7 @@ export function getDefaultConfig(type: StepType): StepConfig {
       };
     case "browser":
       return {
-        actions: [{ type: "navigate", url: "" }],
+        actions: [{ type: "navigate", url: "https://example.com" }],
       };
   }
 }

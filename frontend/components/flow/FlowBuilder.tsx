@@ -5,8 +5,7 @@ import InsertBar from "@/components/flow/InsertBar";
 import { Icon, IconButton, type IconName } from "@/components/ui/IconButton";
 import { useExecute } from "@/hooks/useExecute";
 import { nodeMeta } from "@/lib/nodeMeta";
-import { summarizeStep } from "@/lib/stepSummary";
-import { workflowTemplates } from "@/lib/templates";
+import { getStepSummary } from "@/lib/stepSummary";
 import type { StepType } from "@/lib/types";
 import { useWorkflowStore } from "@/store/workflowStore";
 
@@ -26,7 +25,6 @@ export default function FlowBuilder() {
   const duplicateStep = useWorkflowStore((s) => s.duplicateStep);
   const collapseAllSteps = useWorkflowStore((s) => s.collapseAllSteps);
   const expandAllSteps = useWorkflowStore((s) => s.expandAllSteps);
-  const loadTemplate = useWorkflowStore((s) => s.loadTemplate);
   const createWorkflow = useWorkflowStore((s) => s.createWorkflow);
   const { runStep, loading } = useExecute();
 
@@ -96,26 +94,18 @@ export default function FlowBuilder() {
       <section className="flex min-h-[640px] flex-col rounded border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linear flow</p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-950">Create your first request step</h2>
+          <h2 className="mt-1 text-lg font-semibold text-slate-950">Blank workflow</h2>
         </div>
-        <div className="grid flex-1 content-start gap-3 p-5 md:grid-cols-2">
-          {workflowTemplates.map((template) => (
-            <button
-              key={template.id}
-              type="button"
-              onClick={() => loadTemplate(template)}
-              className="rounded border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
-            >
-              <span className="text-sm font-semibold text-slate-950">{template.name}</span>
-              <span className="mt-1 block text-sm leading-6 text-slate-600">{template.description}</span>
-              <span className="mt-3 block text-xs font-medium text-blue-700">
-                Use {template.steps.length} step template
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="border-t border-slate-200 p-5">
-          <InsertBar onInsert={(type) => insertStepAt(0, type)} />
+        <div className="flex flex-1 flex-col justify-center p-8">
+          <div className="mx-auto w-full max-w-md text-center">
+            <h3 className="text-sm font-semibold text-slate-950">No request steps yet</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Add the first request step to start defining this workflow from scratch.
+            </p>
+            <div className="mt-6 px-8">
+              <InsertBar alwaysVisible onInsert={(type) => insertStepAt(0, type)} />
+            </div>
+          </div>
         </div>
       </section>
     );
@@ -161,6 +151,7 @@ export default function FlowBuilder() {
           const isActive = execution.activeStepId === step.id;
           const isFailed = execution.failedStepId === step.id;
           const typeIcon = getStepTypeIcon(step.type);
+          const summary = getStepSummary(step);
           const validationState = issueCounts?.errors
             ? "error"
             : issueCounts?.warnings
@@ -204,7 +195,7 @@ export default function FlowBuilder() {
                   isActive ? "border-emerald-400 ring-2 ring-emerald-100" : "",
                 ].join(" ")}
               >
-                <div className="flex items-start gap-3 p-3">
+                <div className="flex items-start gap-2.5 p-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700">
                     {index + 1}
                   </div>
@@ -213,7 +204,9 @@ export default function FlowBuilder() {
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600">
                         <Icon name={typeIcon} className="h-3.5 w-3.5" />
                       </span>
-                      <h3 className="truncate text-sm font-semibold text-slate-950">{meta.label}</h3>
+                      <h3 className="min-w-0 flex-1 text-sm font-semibold leading-5 text-slate-950">
+                        {meta.label}
+                      </h3>
                       <span className="group/info relative shrink-0">
                         <button
                           type="button"
@@ -223,13 +216,20 @@ export default function FlowBuilder() {
                         >
                           <Icon name="info" className="h-3.5 w-3.5" />
                         </button>
-                        <span className="pointer-events-none absolute left-1/2 top-6 z-30 hidden w-56 -translate-x-1/2 rounded border border-slate-200 bg-white p-2 text-xs leading-5 text-slate-600 shadow-xl group-hover/info:block group-focus-within/info:block">
+                        <span className="pointer-events-none absolute right-0 top-6 z-[9999] hidden w-56 rounded border border-slate-200 bg-white p-2 text-xs leading-5 text-slate-600 shadow-xl group-hover/info:block group-focus-within/info:block">
                           {meta.description}
                         </span>
                       </span>
                     </div>
                     {!isCollapsed && (
-                      <p className="mt-1 truncate text-sm leading-6 text-slate-600">{summarizeStep(step)}</p>
+                      <div className="mt-1.5 space-y-1">
+                        <p className="break-words text-sm leading-5 text-slate-700">
+                          {summary.primary}
+                        </p>
+                        <p className="break-words text-xs leading-5 text-slate-500">
+                          {summary.secondary}
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>

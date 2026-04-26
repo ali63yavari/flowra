@@ -95,6 +95,16 @@ export interface ValidationIssue {
 
 export type ExecutionStatus = "idle" | "validating" | "running" | "success" | "failed";
 
+export interface ExecutionConsoleEntry {
+  id: string;
+  stepId?: string;
+  title: string;
+  status: "success" | "error";
+  output?: unknown;
+  error?: string | null;
+  createdAt: string;
+}
+
 export interface WorkflowExecutionState {
   status: ExecutionStatus;
   activeStepId?: string;
@@ -102,6 +112,7 @@ export interface WorkflowExecutionState {
   result?: Record<string, unknown> | null;
   error?: string | null;
   lastWorkflow?: WorkflowDefinition | null;
+  consoleEntries?: ExecutionConsoleEntry[];
 }
 
 export interface WorkflowTemplate {
@@ -118,6 +129,15 @@ export interface WorkspaceCollection {
   workflowIds: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export type VariableScope = "tenant" | "collection";
+
+export interface EnvironmentVariableSet {
+  environments: string[];
+  activeEnvironment: string;
+  tenant: Record<string, Record<string, string>>;
+  collections: Record<string, Record<string, Record<string, string>>>;
 }
 
 export interface CollectionWorkflow {

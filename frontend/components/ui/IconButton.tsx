@@ -5,22 +5,27 @@ import type { ReactNode } from "react";
 export type IconName =
   | "alertCircle"
   | "alertTriangle"
+  | "braces"
   | "chevronDown"
   | "chevronRight"
   | "collapseAll"
   | "copy"
   | "edit"
   | "expandAll"
+  | "fileCode"
   | "fileInput"
   | "gitBranch"
   | "globe"
   | "info"
+  | "key"
   | "list"
   | "listChecks"
   | "mousePointerClick"
   | "plus"
   | "play"
+  | "python"
   | "scanSearch"
+  | "terminal"
   | "trash"
   | "check"
   | "eye"
@@ -40,6 +45,12 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
       <path d="M12 9v4" />
       <path d="M12 17h.01" />
+    </>
+  ),
+  braces: (
+    <>
+      <path d="M8 3H7a3 3 0 0 0-3 3v3a3 3 0 0 1-2 3 3 3 0 0 1 2 3v3a3 3 0 0 0 3 3h1" />
+      <path d="M16 3h1a3 3 0 0 1 3 3v3a3 3 0 0 0 2 3 3 3 0 0 0-2 3v3a3 3 0 0 1-3 3h-1" />
     </>
   ),
   chevronDown: <path d="m6 9 6 6 6-6" />,
@@ -88,6 +99,14 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="m9 15 3 3 3-3" />
     </>
   ),
+  fileCode: (
+    <>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="m10 13-2 2 2 2" />
+      <path d="m14 17 2-2-2-2" />
+    </>
+  ),
   gitBranch: (
     <>
       <circle cx="6" cy="6" r="3" />
@@ -109,6 +128,14 @@ const iconPaths: Record<IconName, ReactNode> = {
       <circle cx="12" cy="12" r="10" />
       <path d="M12 16v-4" />
       <path d="M12 8h.01" />
+    </>
+  ),
+  key: (
+    <>
+      <circle cx="7.5" cy="15.5" r="5.5" />
+      <path d="m21 2-9.6 9.6" />
+      <path d="m15.5 7.5 3 3" />
+      <path d="m18 5 3 3" />
     </>
   ),
   list: (
@@ -147,6 +174,14 @@ const iconPaths: Record<IconName, ReactNode> = {
     </>
   ),
   play: <path d="M8 5v14l11-7Z" />,
+  python: (
+    <>
+      <path d="M12 3h3a4 4 0 0 1 4 4v3H9a4 4 0 0 0-4 4v1" />
+      <path d="M12 21H9a4 4 0 0 1-4-4v-3h10a4 4 0 0 0 4-4V9" />
+      <path d="M9 7h.01" />
+      <path d="M15 17h.01" />
+    </>
+  ),
   scanSearch: (
     <>
       <path d="M3 7V5a2 2 0 0 1 2-2h2" />
@@ -155,6 +190,12 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
       <circle cx="11" cy="11" r="3" />
       <path d="m16 16-2.2-2.2" />
+    </>
+  ),
+  terminal: (
+    <>
+      <path d="m4 17 6-6-6-6" />
+      <path d="M12 19h8" />
     </>
   ),
   trash: (

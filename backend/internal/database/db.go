@@ -15,7 +15,11 @@ func NewDB(dsn string) *gorm.DB {
 		log.Fatal(err)
 	}
 
-	err = db.AutoMigrate(
+	return db
+}
+
+func AutoMigrate(db *gorm.DB) {
+	modelsToMigrate := []interface{}{
 		&models.Tenant{},
 		&models.User{},
 		&models.Membership{},
@@ -27,10 +31,23 @@ func NewDB(dsn string) *gorm.DB {
 		&models.Variable{},
 		&models.ExecutionLog{},
 		&models.ExecutionTraceEntry{},
+	}
+
+	allTablesExist := true
+	for _, model := range modelsToMigrate {
+		if !db.Migrator().HasTable(model) {
+			allTablesExist = false
+			break
+		}
+	}
+	if allTablesExist {
+		return
+	}
+
+	err := db.AutoMigrate(
+		modelsToMigrate...,
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	return db
 }

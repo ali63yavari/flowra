@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"flowra/internal/config"
 	"flowra/internal/database"
 	"flowra/internal/execution"
 	"flowra/internal/queue"
@@ -15,8 +16,9 @@ import (
 
 func main() {
 	ctx := context.Background()
+	cfg := config.Load()
 
-	db := database.NewDB("postgres://user:pass@localhost:5432/flowra")
+	db := database.NewDB(cfg.DatabaseDSN)
 
 	jobRepo := repository.NewJobRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
@@ -30,7 +32,7 @@ func main() {
 	}
 	variableService := workspace.NewVariableService(environmentRepo, variableRepo, secretBox)
 
-	q := queue.NewRedisQueue("localhost:6379", "flowra_jobs")
+	q := queue.NewRedisQueue(cfg.RedisAddr, cfg.RedisQueue)
 	service := execution.NewService()
 
 	w := worker.NewWorker(q, service, jobRepo, workflowRepo, logRepo, traceRepo, variableService)

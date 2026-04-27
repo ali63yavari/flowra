@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import FlowBuilder from "@/components/flow/FlowBuilder";
 import { IconButton } from "@/components/ui/IconButton";
@@ -9,13 +10,19 @@ import NodeEditor from "@/components/workflow/NodeEditor";
 import NodePalette from "@/components/workflow/NodePalette";
 import RunPanel from "@/components/workflow/RunPanel";
 import WorkflowCanvas from "@/components/workflow/WorkflowCanvas";
-import { listCollections, loadBackendVariableSet } from "@/lib/api";
+import {
+  createBackendCollection,
+  createBackendWorkflow,
+  listCollections,
+  loadBackendVariableSet,
+} from "@/lib/api";
 import { useWorkflowStore } from "@/store/workflowStore";
 
 export default function BuilderPage() {
   const [sidebarMode, setSidebarMode] = useState<"open" | "rail" | "hidden">("open");
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [environmentManagerOpen, setEnvironmentManagerOpen] = useState(false);
+  const [expandedWorkspacePanel, setExpandedWorkspacePanel] = useState<"flow" | "graph" | null>(null);
   const activeCollection = useWorkflowStore((s) =>
     s.activeCollectionId ? s.collections[s.activeCollectionId] : undefined
   );
@@ -49,6 +56,11 @@ export default function BuilderPage() {
   useEffect(() => {
     let cancelled = false;
     listCollections()
+      .then(async (response) => {
+        if (response.collections.length > 0) return response;
+        await seedCurrentWorkspaceToBackend();
+        return listCollections();
+      })
       .then((response) => {
         if (cancelled) return;
         hydrateWorkspace(response.collections);
@@ -182,9 +194,32 @@ export default function BuilderPage() {
             </div>
           </header>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(420px,1.25fr)_minmax(300px,0.75fr)]">
-            <WorkflowCanvas />
-            <FlowBuilder />
+          <div
+            className={[
+              "grid gap-4",
+              expandedWorkspacePanel
+                ? "grid-cols-1"
+                : "xl:grid-cols-[minmax(390px,0.85fr)_minmax(420px,1.15fr)]",
+            ].join(" ")}
+          >
+            {expandedWorkspacePanel !== "graph" && (
+              <WorkspacePanelFrame
+                label={expandedWorkspacePanel === "flow" ? "Exit fullscreen linear flow" : "Fullscreen linear flow"}
+                expanded={expandedWorkspacePanel === "flow"}
+                onToggle={() => setExpandedWorkspacePanel((panel) => (panel === "flow" ? null : "flow"))}
+              >
+                <FlowBuilder />
+              </WorkspacePanelFrame>
+            )}
+            {expandedWorkspacePanel !== "flow" && (
+              <WorkspacePanelFrame
+                label={expandedWorkspacePanel === "graph" ? "Exit fullscreen graph preview" : "Fullscreen graph preview"}
+                expanded={expandedWorkspacePanel === "graph"}
+                onToggle={() => setExpandedWorkspacePanel((panel) => (panel === "graph" ? null : "graph"))}
+              >
+                <WorkflowCanvas />
+              </WorkspacePanelFrame>
+            )}
           </div>
 
           <RunPanel />
@@ -197,4 +232,49 @@ export default function BuilderPage() {
       <EnvironmentManager open={environmentManagerOpen} onClose={() => setEnvironmentManagerOpen(false)} />
     </main>
   );
+}
+
+function WorkspacePanelFrame({
+  children,
+  expanded,
+  label,
+  onToggle,
+}: {
+  children: ReactNode;
+  expanded: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="relative min-w-0">
+      <div className="absolute right-3 top-3 z-20">
+        <IconButton
+          label={label}
+          icon={expanded ? "collapseAll" : "expandAll"}
+          onClick={onToggle}
+          className="border border-slate-200 bg-white/95 shadow-sm hover:bg-slate-100"
+        />
+      </div>
+      {children}
+    </div>
+  );
+}
+
+async function seedCurrentWorkspaceToBackend() {
+  const state = useWorkflowStore.getState();
+  const collections = Object.values(state.collections);
+
+  for (const collection of collections) {
+    await createBackendCollection(collection.id, collection.name);
+    for (const workflowId of collection.workflowIds) {
+      const workflow = state.workflows[workflowId];
+      if (!workflow) continue;
+      await createBackendWorkflow(collection.id, {
+        id: workflow.id,
+        name: workflow.name,
+        description: workflow.description,
+        definition: workflow.workflow,
+      });
+    }
+  }
 }

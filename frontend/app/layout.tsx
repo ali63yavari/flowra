@@ -3,7 +3,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Flowra",
-  description: "Visual web-to-API workflow automation.",
+  description: "Automate, connect, and simplify web-to-API workflows.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

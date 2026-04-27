@@ -1,0 +1,36 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="flowra-top" x1="26" y1="23" x2="105" y2="45" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#12C8F8"/>
+      <stop offset="1" stop-color="#1479F6"/>
+    </linearGradient>
+    <linearGradient id="flowra-core" x1="31" y1="42" x2="85" y2="78" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0969F0"/>
+      <stop offset="1" stop-color="#5B20D7"/>
+    </linearGradient>
+    <linearGradient id="flowra-bottom" x1="27" y1="83" x2="106" y2="83" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7A28E8"/>
+      <stop offset="1" stop-color="#F13A96"/>
+    </linearGradient>
+  </defs>
+  <path
+    d="M31 55V46C31 32.7 41.7 22 55 22H87V15.6C87 12.9 90.2 11.6 92.1 13.5L112.5 33.9C113.7 35.1 113.7 37 112.5 38.2L92.1 58.6C90.2 60.5 87 59.2 87 56.5V50H57C48.2 50 41 57.2 41 66V69.4C37.9 62.8 34.5 58.2 31 55Z"
+    fill="url(#flowra-top)"
+  />
+  <path
+    d="M31 53C41.8 43.1 50.1 40 64 40H87V50H57C48.2 50 41 57.2 41 66V70H87C86.3 81 78.7 88 67.1 88H45.2C39.3 88 34.5 92.8 34.5 98.7V104C31.9 107.9 27.9 110.8 23 112V72.7C27.1 70.8 29.9 66.7 29.9 62C29.9 59 31 55.9 31 53Z"
+    fill="url(#flowra-core)"
+  />
+  <path
+    d="M23 118V91.4C27.7 90.5 30.4 87.4 34.2 82.3C40.1 74.5 47.2 72 59 72H87V65.5C87 62.8 90.2 61.5 92.1 63.4L112.5 83.8C113.7 85 113.7 86.9 112.5 88.1L92.1 108.5C90.2 110.4 87 109.1 87 106.4V100H60C51.7 100 45.3 103.7 41.3 110.6C38.2 116.1 32.4 119 25.7 119H24C23.4 119 23 118.6 23 118Z"
+    fill="url(#flowra-bottom)"
+  />
+  <path
+    d="M31.5 78C40.06 78 47 71.06 47 62.5C47 53.94 40.06 47 31.5 47C22.94 47 16 53.94 16 62.5C16 71.06 22.94 78 31.5 78Z"
+    fill="white"
+  />
+  <path
+    d="M31.5 72C36.75 72 41 67.75 41 62.5C41 57.25 36.75 53 31.5 53C26.25 53 22 57.25 22 62.5C22 67.75 26.25 72 31.5 72Z"
+    fill="#157BF7"
+  />
+</svg>

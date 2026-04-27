@@ -23,8 +23,6 @@ export default function FlowBuilder() {
   const selectStep = useWorkflowStore((s) => s.selectStep);
   const deleteStep = useWorkflowStore((s) => s.deleteStep);
   const duplicateStep = useWorkflowStore((s) => s.duplicateStep);
-  const collapseAllSteps = useWorkflowStore((s) => s.collapseAllSteps);
-  const expandAllSteps = useWorkflowStore((s) => s.expandAllSteps);
   const createWorkflow = useWorkflowStore((s) => s.createWorkflow);
   const { runStep, loading } = useExecute();
 
@@ -116,24 +114,12 @@ export default function FlowBuilder() {
       <div className="border-b border-slate-200 px-5 py-3">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linear flow</p>
-          <div className="flex items-center gap-1">
+          <div className="mr-10 flex items-center gap-1">
             <IconButton
               label="Validate workflow"
               icon="check"
-              className="h-6 w-6 rounded-sm [&_svg]:h-3.5 [&_svg]:w-3.5"
+              className="h-6 w-6 rounded-sm border border-slate-200 bg-white text-emerald-700 shadow-sm hover:bg-emerald-50 [&_svg]:h-3.5 [&_svg]:w-3.5"
               onClick={() => validate()}
-            />
-            <IconButton
-              label="Expand all request cards"
-              icon="expandAll"
-              className="h-6 w-6 rounded-sm [&_svg]:h-3.5 [&_svg]:w-3.5"
-              onClick={expandAllSteps}
-            />
-            <IconButton
-              label="Collapse all request cards"
-              icon="collapseAll"
-              className="h-6 w-6 rounded-sm [&_svg]:h-3.5 [&_svg]:w-3.5"
-              onClick={collapseAllSteps}
             />
           </div>
         </div>

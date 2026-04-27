@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { IconButton } from "@/components/ui/IconButton";
 import {
   createBackendCollection,
@@ -120,13 +121,33 @@ export default function NodePalette({ collapsed = false }: { collapsed?: boolean
   return (
     <aside className="flex h-screen w-full flex-col border-r border-slate-200 bg-slate-950 text-white">
       <div className="border-b border-white/10 p-4">
-        <div className="flex items-center gap-3 rounded border border-white/10 bg-white/5 p-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded bg-blue-500 text-sm font-black text-white">
-            F
-          </div>
-          <div className={collapsed ? "hidden" : "min-w-0"}>
-            <h1 className="truncate text-base font-semibold text-white">Flowra</h1>
-            <p className="truncate text-xs text-slate-400">Web-to-API workspace</p>
+        <div
+          className={[
+            "rounded border border-white/10 bg-white/[0.06]",
+            collapsed ? "flex justify-center p-2" : "p-3",
+          ].join(" ")}
+        >
+          <div className={collapsed ? "flex items-center justify-center" : "flex items-center gap-3"}>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-white shadow-sm shadow-blue-950/30">
+              <Image
+                src="/flowra-mark.svg"
+                alt="Flowra"
+                width={34}
+                height={34}
+                priority
+                className="h-8 w-8"
+              />
+            </div>
+            <div className={collapsed ? "hidden" : "min-w-0"}>
+              <h1 className="truncate text-xl font-black tracking-normal text-white">Flowra</h1>
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-300">
+                <span className="truncate">Automate</span>
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" />
+                <span className="truncate">Connect</span>
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
+                <span className="truncate">Simplify</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

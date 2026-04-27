@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 
 	"flowra/internal/api/handlers"
 	"flowra/internal/api/middleware"
+	"flowra/internal/config"
 	"flowra/internal/database"
 	"flowra/internal/execution"
+	"flowra/internal/models"
 	"flowra/internal/queue"
 	"flowra/internal/repository"
 	"flowra/internal/security"
@@ -17,11 +21,14 @@ import (
 
 func main() {
 	app := fiber.New()
+	cfg := config.Load()
 
-	db := database.NewDB("postgres://user:pass@localhost:5432/flowra")
+	db := database.NewDB(cfg.DatabaseDSN)
+	database.AutoMigrate(db)
 
 	jobRepo := repository.NewJobRepository(db)
 	tenantRepo := repository.NewTenantRepository(db)
+	seedTenant(context.Background(), cfg, tenantRepo)
 	collectionRepo := repository.NewCollectionRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
 	environmentRepo := repository.NewEnvironmentRepository(db)
@@ -33,9 +40,14 @@ func main() {
 	}
 	variableService := workspace.NewVariableService(environmentRepo, variableRepo, secretBox)
 
-	q := queue.NewRedisQueue("localhost:6379", "flowra_jobs")
+	q := queue.NewRedisQueue(cfg.RedisAddr, cfg.RedisQueue)
 	execService := execution.NewService()
 
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: cfg.AllowedOrigins,
+		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+		AllowHeaders: "Origin,Content-Type,Accept,X-API-Key,X-Flowra-Environment",
+	}))
 	app.Use(middleware.RequestID())
 	app.Use(middleware.APIKeyAuth(tenantRepo))
 	app.Use(middleware.RateLimit())
@@ -74,5 +86,25 @@ func main() {
 	app.Delete("/variables/bulk", variableHandler.DeleteBulk)
 	app.Get("/variables/export", variableHandler.Export)
 
-	log.Fatal(app.Listen(":3000"))
+	log.Fatal(app.Listen(cfg.ListenAddr()))
+}
+
+func seedTenant(ctx context.Context, cfg config.Config, tenantRepo repository.TenantRepository) {
+	if !cfg.HasSeedTenant() {
+		return
+	}
+	name := cfg.SeedTenantName
+	if name == "" {
+		name = "Local Flowra Workspace"
+	}
+	err := tenantRepo.Upsert(ctx, &models.Tenant{
+		ID:                 cfg.SeedTenantID,
+		Name:               name,
+		APIKey:             cfg.SeedTenantAPIKey,
+		RateLimitPerMinute: 600,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Seed tenant ready: %s", cfg.SeedTenantID)
 }

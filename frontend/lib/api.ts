@@ -13,8 +13,8 @@ interface ExecuteDirectOptions {
   trace?: boolean;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "local-flowra-key";
 
 export interface BackendCollection {
   id: string;

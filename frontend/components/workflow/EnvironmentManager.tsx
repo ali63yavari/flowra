@@ -11,9 +11,11 @@ type ExportMode = "active" | "all";
 export default function EnvironmentManager({
   open,
   onClose,
+  initialScope,
 }: {
   open: boolean;
   onClose: () => void;
+  initialScope?: VariableScope;
 }) {
   const collections = useWorkflowStore((s) => s.collections);
   const activeCollectionId = useWorkflowStore((s) => s.activeCollectionId);
@@ -25,7 +27,7 @@ export default function EnvironmentManager({
   const updateTenantVariables = useWorkflowStore((s) => s.updateTenantVariables);
   const updateCollectionVariables = useWorkflowStore((s) => s.updateCollectionVariables);
 
-  const [scope, setScope] = useState<VariableScope>("tenant");
+  const [scope, setScope] = useState<VariableScope>(initialScope ?? "tenant");
   const [newEnvironmentName, setNewEnvironmentName] = useState("");
   const [renameValue, setRenameValue] = useState(() => variables.activeEnvironment);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);

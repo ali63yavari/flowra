@@ -41,13 +41,21 @@ interface WorkflowState {
   execution: WorkflowExecutionState;
   errors: ValidationIssue[];
 
-  createCollection: (name?: string) => string;
+  createCollection: (
+    name?: string,
+    options?: { description?: string; isOnline?: boolean; accessRole?: string }
+  ) => string;
   renameCollection: (id: string, name: string) => void;
+  updateCollectionMeta: (
+    id: string,
+    patch: Partial<Pick<WorkspaceCollection, "name" | "description" | "isOnline" | "accessRole">>
+  ) => void;
   deleteCollection: (id: string) => void;
   selectCollection: (id: string) => void;
   createWorkflow: (collectionId?: string, name?: string) => string;
   renameWorkflow: (id: string, name: string) => void;
   updateWorkflowDescription: (id: string, description: string) => void;
+  updateWorkflowAccess: (id: string, access: { isOnline?: boolean; accessRole?: string }) => void;
   duplicateWorkflow: (id: string) => string;
   deleteWorkflow: (id: string) => void;
   selectWorkflow: (id: string) => void;
@@ -88,6 +96,10 @@ interface WorkflowState {
   ) => void;
   setExecutionResult: (result: {
     result?: Record<string, unknown> | null;
+    input?: Record<string, unknown> | null;
+    variables?: Record<string, unknown> | null;
+    extracted?: Record<string, unknown> | null;
+    lastResponse?: WorkflowExecutionState["lastResponse"];
     error?: string | null;
     lastWorkflow?: WorkflowDefinition | null;
     traces?: WorkflowExecutionState["traces"];
@@ -101,6 +113,10 @@ interface WorkflowState {
 const defaultExecution: WorkflowExecutionState = {
   status: "idle",
   result: null,
+  input: null,
+  variables: null,
+  extracted: null,
+  lastResponse: null,
   error: null,
   lastWorkflow: null,
   consoleEntries: [],
@@ -141,6 +157,9 @@ export const useWorkflowStore = create<WorkflowState>()(
             collections[collection.id] = {
               id: collection.id,
               name: collection.name,
+              description: collection.description ?? "",
+              isOnline: collection.is_online ?? collection.IsOnline ?? false,
+              accessRole: collection.access_role ?? collection.AccessRole ?? "Collection",
               workflowIds,
               createdAt: collection.created_at,
               updatedAt: collection.updated_at,
@@ -177,12 +196,15 @@ export const useWorkflowStore = create<WorkflowState>()(
           },
         })),
 
-      createCollection: (name) => {
+      createCollection: (name, options) => {
         const now = new Date().toISOString();
         const id = uuid();
         const collection: WorkspaceCollection = {
           id,
           name: name?.trim() || `Collection ${Object.keys(get().collections).length + 1}`,
+          description: options?.description ?? "",
+          isOnline: options?.isOnline ?? false,
+          accessRole: options?.accessRole ?? "Collection",
           workflowIds: [],
           createdAt: now,
           updatedAt: now,
@@ -207,6 +229,28 @@ export const useWorkflowStore = create<WorkflowState>()(
             collections: {
               ...state.collections,
               [id]: { ...collection, name: name.trim(), updatedAt: new Date().toISOString() },
+            },
+          };
+        }),
+
+      updateCollectionMeta: (id, patch) =>
+        set((state) => {
+          const collection = state.collections[id];
+          if (!collection) return state;
+          const nextName = patch.name?.trim();
+          const updated: WorkspaceCollection = {
+            ...collection,
+            ...patch,
+            name: nextName || collection.name,
+            description: patch.description ?? collection.description,
+            isOnline: patch.isOnline ?? collection.isOnline,
+            accessRole: patch.accessRole ?? collection.accessRole,
+            updatedAt: new Date().toISOString(),
+          };
+          return {
+            collections: {
+              ...state.collections,
+              [id]: updated,
             },
           };
         }),
@@ -281,13 +325,18 @@ export const useWorkflowStore = create<WorkflowState>()(
       },
 
       renameWorkflow: (id, name) => {
-        set((state) => updateWorkflowOnly(state, id, { name: name.trim() || "Untitled workflow" }));
+        if (!name.trim()) return;
+        set((state) => updateWorkflowOnly(state, id, { name }));
         syncWorkflowMetaToBackend(get(), id);
       },
 
       updateWorkflowDescription: (id, description) => {
         set((state) => updateWorkflowOnly(state, id, { description }));
         syncWorkflowMetaToBackend(get(), id);
+      },
+
+      updateWorkflowAccess: (id, access) => {
+        set((state) => updateWorkflowOnly(state, id, access));
       },
 
       duplicateWorkflow: (id) =>
@@ -841,6 +890,9 @@ function makeCollection(name: string): WorkspaceCollection {
   return {
     id: uuid(),
     name,
+    description: "",
+    isOnline: false,
+    accessRole: "Collection",
     workflowIds: [],
     createdAt: now,
     updatedAt: now,
@@ -902,6 +954,8 @@ function backendWorkflowToStoreWorkflow(
     collectionId: workflow.collection_id ?? fallbackCollectionId,
     name: workflow.name,
     description: workflow.description ?? "",
+    isOnline: workflowIsOnline(workflow),
+    accessRole: workflowAccessRole(workflow),
     workflow: definition,
     branchTargets: branchTargetsFromDefinition(definition),
     selectedStepId: definition.steps[0]?.id,
@@ -911,6 +965,14 @@ function backendWorkflowToStoreWorkflow(
     createdAt: workflow.created_at,
     updatedAt: workflow.updated_at,
   };
+}
+
+function workflowIsOnline(workflow: BackendWorkflow) {
+  return workflow.is_online ?? workflow.IsOnline ?? false;
+}
+
+function workflowAccessRole(workflow: BackendWorkflow) {
+  return workflow.access_role ?? workflow.AccessRole ?? "Collection";
 }
 
 function branchTargetsFromDefinition(definition: WorkflowDefinition) {
@@ -938,6 +1000,8 @@ function makeWorkflow(
     collectionId,
     name,
     description: "",
+    isOnline: false,
+    accessRole: "Collection",
     workflow: { steps: [] },
     branchTargets: {},
     selectedStepId: undefined,
@@ -1008,7 +1072,7 @@ function syncActiveWorkflow(
 function updateWorkflowOnly(
   state: WorkflowState,
   id: string,
-  patch: Partial<Pick<CollectionWorkflow, "name" | "description">>
+  patch: Partial<Pick<CollectionWorkflow, "name" | "description" | "isOnline" | "accessRole">>
 ) {
   const workflow = state.workflows[id];
   if (!workflow) return state;

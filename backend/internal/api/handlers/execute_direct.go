@@ -49,18 +49,13 @@ func (h *ExecuteDirectHandler) Execute(c *fiber.Ctx) error {
 			fiber.Map{
 				"status": "error",
 				"error":  err.Error(),
+				"result": result,
 				"traces": resultTraces(result),
 			},
 		)
 	}
 
-	return c.JSON(
-		fiber.Map{
-			"status": "success",
-			"data":   result.Data,
-			"traces": result.Traces,
-		},
-	)
+	return c.JSON(executionResponse("success", result))
 }
 
 func mergeDirectVariables(
@@ -80,4 +75,19 @@ func mergeDirectVariables(
 		}
 	}
 	return variables
+}
+
+func executionResponse(status string, result *execution.Result) fiber.Map {
+	if result == nil {
+		return fiber.Map{"status": status}
+	}
+	return fiber.Map{
+		"status":        status,
+		"data":          result.Data,
+		"input":         result.Input,
+		"variables":     result.Variables,
+		"extracted":     result.Extracted,
+		"last_response": result.LastResponse,
+		"traces":        result.Traces,
+	}
 }

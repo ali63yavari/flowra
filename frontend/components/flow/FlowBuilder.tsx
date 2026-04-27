@@ -68,7 +68,7 @@ export default function FlowBuilder() {
 
   if (!activeWorkflowId) {
     return (
-      <section className="flex min-h-[420px] flex-col justify-center rounded border border-slate-200 bg-white p-5">
+      <section className="flex h-full min-h-[280px] flex-col justify-center rounded border border-slate-200 bg-white p-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">No active workflow</p>
         <h2 className="mt-1 text-lg font-semibold text-slate-950">Create a workflow</h2>
         <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
@@ -89,7 +89,7 @@ export default function FlowBuilder() {
 
   if (steps.length === 0) {
     return (
-      <section className="flex min-h-[640px] flex-col rounded border border-slate-200 bg-white">
+      <section className="flex h-full min-h-[280px] flex-col rounded border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linear flow</p>
           <h2 className="mt-1 text-lg font-semibold text-slate-950">Blank workflow</h2>
@@ -110,8 +110,8 @@ export default function FlowBuilder() {
   }
 
   return (
-    <section className="rounded border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-5 py-3">
+    <section className="flex h-full min-h-0 flex-col rounded border border-slate-200 bg-white">
+      <div className="shrink-0 border-b border-slate-200 px-5 py-3">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linear flow</p>
           <div className="mr-10 flex items-center gap-1">
@@ -128,7 +128,7 @@ export default function FlowBuilder() {
         </p>
       </div>
 
-      <div className="px-5 py-4">
+      <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
         {steps.map((step, index) => {
           const meta = nodeMeta[step.type];
           const isSelected = selectedStepId === step.id;

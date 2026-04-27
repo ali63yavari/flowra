@@ -85,6 +85,11 @@ func (e *Engine) ExecuteWithTrace(
 				StartedAt:     startedAt,
 				DurationMs:    time.Since(startedAt).Milliseconds(),
 				OutputPreview: outputPreview(state),
+				Request:       state.LastRequest,
+				Response:      NewHTTPResponseDebug(state.LastResponse),
+				Input:         state.Input,
+				Variables:     maskedInterfaceKeys(state.Variables),
+				Extracted:     state.Extracted,
 			}
 			if err != nil {
 				entry.Status = "error"
@@ -142,6 +147,14 @@ func outputPreview(state *ExecutionState) string {
 
 func maskedKeys(values map[string]interface{}) map[string]string {
 	result := map[string]string{}
+	for key := range values {
+		result[key] = "set"
+	}
+	return result
+}
+
+func maskedInterfaceKeys(values map[string]interface{}) map[string]interface{} {
+	result := map[string]interface{}{}
 	for key := range values {
 		result[key] = "set"
 	}

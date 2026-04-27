@@ -39,20 +39,45 @@ export function useExecute() {
       const res = await executeDirect(workflow, input, executionVariables);
 
       if (res.status === "error") {
-        setExecutionResult({ error: res.error, result: null, traces: res.traces ?? [] });
+        const result = res.result;
+        setExecutionResult({
+          error: res.error,
+          result: result?.data ?? res.data ?? null,
+          input: result?.input ?? res.input ?? input,
+          variables: result?.variables ?? res.variables ?? null,
+          extracted: result?.extracted ?? res.extracted ?? null,
+          lastResponse: result?.last_response ?? res.last_response ?? null,
+          traces: result?.traces ?? res.traces ?? [],
+        });
         addConsoleEntry({
           title: "Workflow run",
           status: "error",
           error: res.error,
+          input,
+          variables: result?.variables ?? res.variables,
+          extracted: result?.extracted ?? res.extracted,
+          response: result?.last_response ?? res.last_response,
         });
         setExecutionStatus("failed");
       } else {
-        setExecutionResult({ result: res.data, error: null, traces: res.traces ?? [] });
+        setExecutionResult({
+          result: res.data,
+          error: null,
+          input: res.input ?? input,
+          variables: res.variables ?? null,
+          extracted: res.extracted ?? null,
+          lastResponse: res.last_response ?? null,
+          traces: res.traces ?? [],
+        });
         addTraceConsoleEntries(res.traces, addConsoleEntry);
         addConsoleEntry({
           title: "Workflow run",
           status: "success",
           output: res.data,
+          input: res.input ?? input,
+          variables: res.variables,
+          extracted: res.extracted,
+          response: res.last_response,
         });
         setExecutionStatus("success");
       }
@@ -84,23 +109,48 @@ export function useExecute() {
       const res = await executeDirect(workflow, input, executionVariables);
 
       if (res.status === "error") {
-        setExecutionResult({ error: res.error, result: null, traces: res.traces ?? [] });
-        addTraceConsoleEntries(res.traces, addConsoleEntry);
+        const result = res.result;
+        setExecutionResult({
+          error: res.error,
+          result: result?.data ?? res.data ?? null,
+          input: result?.input ?? res.input ?? input,
+          variables: result?.variables ?? res.variables ?? null,
+          extracted: result?.extracted ?? res.extracted ?? null,
+          lastResponse: result?.last_response ?? res.last_response ?? null,
+          traces: result?.traces ?? res.traces ?? [],
+        });
+        addTraceConsoleEntries(result?.traces ?? res.traces, addConsoleEntry);
         addConsoleEntry({
           stepId,
           title,
           status: "error",
           error: res.error,
+          input,
+          variables: result?.variables ?? res.variables,
+          extracted: result?.extracted ?? res.extracted,
+          response: result?.last_response ?? res.last_response,
         });
         setExecutionStatus("failed", { failedStepId: stepId });
       } else {
-        setExecutionResult({ result: res.data, error: null, traces: res.traces ?? [] });
+        setExecutionResult({
+          result: res.data,
+          error: null,
+          input: res.input ?? input,
+          variables: res.variables ?? null,
+          extracted: res.extracted ?? null,
+          lastResponse: res.last_response ?? null,
+          traces: res.traces ?? [],
+        });
         addTraceConsoleEntries(res.traces, addConsoleEntry);
         addConsoleEntry({
           stepId,
           title,
           status: "success",
           output: res.data,
+          input: res.input ?? input,
+          variables: res.variables,
+          extracted: res.extracted,
+          response: res.last_response,
         });
         setExecutionStatus("success");
       }
@@ -157,7 +207,17 @@ function addTraceConsoleEntries(
       stepId: trace.step_id,
       title: `${nodeMeta[trace.type as keyof typeof nodeMeta]?.label ?? trace.type} trace`,
       status: trace.status,
-      output: parsePreview(trace.output_preview),
+      method: trace.request?.method,
+      url: trace.request?.url,
+      statusCode: trace.response?.status_code,
+      durationMs: trace.duration_ms,
+      request: trace.request,
+      response: trace.response,
+      input: trace.input,
+      variables: trace.variables,
+      extracted: trace.extracted,
+      trace,
+      output: trace.response?.parsed_body ?? trace.response?.body ?? parsePreview(trace.output_preview),
       error: trace.error,
     });
   });

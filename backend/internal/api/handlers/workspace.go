@@ -32,6 +32,8 @@ type collectionRequest struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	IsOnline    *bool  `json:"is_online"`
+	AccessRole  string `json:"access_role"`
 }
 
 type workflowRequest struct {
@@ -57,6 +59,8 @@ func (h *WorkspaceHandler) ListCollections(c *fiber.Ctx) error {
 			"id":          collection.ID,
 			"name":        collection.Name,
 			"description": collection.Description,
+			"is_online":   collection.IsOnline,
+			"access_role": accessRoleOrDefault(collection.AccessRole),
 			"created_at":  collection.CreatedAt,
 			"updated_at":  collection.UpdatedAt,
 			"workflows":   workflows,
@@ -79,6 +83,8 @@ func (h *WorkspaceHandler) CreateCollection(c *fiber.Ctx) error {
 		TenantID:    tenant.ID,
 		Name:        req.Name,
 		Description: req.Description,
+		IsOnline:    boolOrFalse(req.IsOnline),
+		AccessRole:  accessRoleOrDefault(req.AccessRole),
 	}
 	if err := h.collections.Create(context.Background(), collection); err != nil {
 		return err
@@ -97,6 +103,12 @@ func (h *WorkspaceHandler) UpdateCollection(c *fiber.Ctx) error {
 		updates["name"] = req.Name
 	}
 	updates["description"] = req.Description
+	if req.IsOnline != nil {
+		updates["is_online"] = *req.IsOnline
+	}
+	if req.AccessRole != "" {
+		updates["access_role"] = req.AccessRole
+	}
 	if err := h.collections.Update(context.Background(), tenant.ID, c.Params("id"), updates); err != nil {
 		return err
 	}
@@ -218,4 +230,15 @@ func idOrNew(id string) string {
 		return id
 	}
 	return uuid.NewString()
+}
+
+func accessRoleOrDefault(role string) string {
+	if role == "" {
+		return "Collection"
+	}
+	return role
+}
+
+func boolOrFalse(value *bool) bool {
+	return value != nil && *value
 }

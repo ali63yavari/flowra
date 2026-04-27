@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Icon, IconButton, type IconName } from "@/components/ui/IconButton";
+import { Icon } from "@/components/ui/IconButton";
 import type { Step } from "@/lib/types";
 
 export default function EndpointAccessPanel({
@@ -12,6 +12,7 @@ export default function EndpointAccessPanel({
   steps: Step[];
 }) {
   const [open, setOpen] = useState(false);
+  const [snippetOpen, setSnippetOpen] = useState(false);
   const [copied, setCopied] = useState<"curl" | "python" | "go" | null>(null);
   const endpoint = useMemo(() => buildWorkflowEndpoint(workflowId), [workflowId]);
   const inputFields = useMemo(() => collectWorkflowInputFields(steps), [steps]);
@@ -33,6 +34,7 @@ export default function EndpointAccessPanel({
     try {
       await navigator.clipboard.writeText(snippets[kind]);
       setCopied(kind);
+      setSnippetOpen(false);
       window.setTimeout(() => setCopied(null), 1600);
     } catch {
       setCopied(null);
@@ -40,40 +42,43 @@ export default function EndpointAccessPanel({
   };
 
   return (
-    <section className="mt-3">
-      <div className="flex flex-wrap items-center gap-1.5">
+    <section className="relative shrink-0">
+      <div className="flex items-center gap-1">
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="inline-flex h-7 items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+          className="inline-flex h-6 items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-1.5 text-[11px] font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
         >
           <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">POST</span>
           Endpoint
-          <Icon name={open ? "chevronDown" : "chevronRight"} className="h-3.5 w-3.5" />
+          <Icon name={open ? "chevronDown" : "chevronRight"} className="h-3 w-3" />
         </button>
-        <SnippetButton
-          label={copied === "curl" ? "Copied curl" : "Copy curl request"}
-          icon="terminal"
-          onClick={() => copySnippet("curl")}
-        />
-        <SnippetButton
-          label={copied === "python" ? "Copied Python" : "Copy Python snippet"}
-          icon="python"
-          onClick={() => copySnippet("python")}
-        />
-        <SnippetButton
-          label={copied === "go" ? "Copied Go" : "Copy Go snippet"}
-          icon="braces"
-          onClick={() => copySnippet("go")}
-        />
+        <div className="relative">
+          <button
+            type="button"
+            title={copied ? `Copied ${copied}` : "Copy script"}
+            onClick={() => setSnippetOpen((value) => !value)}
+            className="inline-flex h-6 items-center gap-1 rounded border border-slate-200 bg-white px-1.5 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+          >
+            <Icon name="copy" className="h-3 w-3" />
+            <Icon name={snippetOpen ? "chevronDown" : "chevronRight"} className="h-3 w-3" />
+          </button>
+          {snippetOpen ? (
+            <div className="absolute right-0 top-7 z-[10001] w-32 overflow-hidden rounded border border-slate-200 bg-white py-1 text-xs shadow-xl">
+              <SnippetMenuItem icon="terminal" label="curl" onClick={() => copySnippet("curl")} />
+              <SnippetMenuItem icon="python" label="Python" onClick={() => copySnippet("python")} />
+              <SnippetMenuItem icon="braces" label="Go" onClick={() => copySnippet("go")} />
+            </div>
+          ) : null}
+        </div>
       </div>
       {open ? (
-        <div className="mt-2 rounded border border-slate-200 bg-slate-50 px-3 py-2">
+        <div className="absolute right-0 top-7 z-[10000] w-[min(620px,calc(100vw-420px))] min-w-[360px] rounded border border-slate-200 bg-slate-50 px-2 py-1.5 shadow-2xl">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700">POST</span>
+            <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">POST</span>
             <code className="min-w-[180px] flex-1 break-all text-xs leading-5 text-slate-700">{endpoint}</code>
           </div>
-          <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-1 text-xs text-slate-600">
+          <div className="mt-1 flex flex-wrap items-start gap-x-3 gap-y-0.5 text-[11px] text-slate-600">
             <span className="inline-flex min-w-0 items-center gap-1">
               <Icon name="key" className="h-3.5 w-3.5 shrink-0 text-slate-400" />
               <span className="font-medium text-slate-700">X-API-Key</span>
@@ -97,22 +102,24 @@ export default function EndpointAccessPanel({
   );
 }
 
-function SnippetButton({
+function SnippetMenuItem({
   label,
   icon,
   onClick,
 }: {
   label: string;
-  icon: IconName;
+  icon: "terminal" | "python" | "braces";
   onClick: () => void;
 }) {
   return (
-    <IconButton
-      label={label}
-      icon={icon}
-      className="h-7 w-7 rounded border border-slate-200 bg-white [&_svg]:h-3.5 [&_svg]:w-3.5"
+    <button
+      type="button"
       onClick={onClick}
-    />
+      className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-slate-700 hover:bg-slate-50"
+    >
+      <Icon name={icon} className="h-3.5 w-3.5 text-slate-500" />
+      {label}
+    </button>
   );
 }
 

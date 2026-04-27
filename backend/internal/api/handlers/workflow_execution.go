@@ -82,14 +82,11 @@ func (h *WorkflowExecutionHandler) ExecuteDirect(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"status": "error",
 			"error":  err.Error(),
+			"result": result,
 			"traces": resultTraces(result),
 		})
 	}
-	return c.JSON(fiber.Map{
-		"status": "success",
-		"data":   result.Data,
-		"traces": result.Traces,
-	})
+	return c.JSON(executionResponse("success", result))
 }
 
 func resultTraces(result *execution.Result) []workflow.ExecutionTraceEntry {

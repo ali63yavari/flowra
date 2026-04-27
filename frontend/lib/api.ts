@@ -1,10 +1,40 @@
-import type { EnvironmentVariableSet, ExecutionTraceEntry, WorkflowDefinition } from "@/lib/types";
+import type {
+  EnvironmentVariableSet,
+  ExecutionResponseDebug,
+  ExecutionTraceEntry,
+  WorkflowDefinition,
+} from "@/lib/types";
 
 export type ExecutionInput = Record<string, string | number | boolean | null>;
 
 export type ExecuteDirectResponse =
-  | { status: "success"; data: Record<string, unknown>; traces?: ExecutionTraceEntry[] }
-  | { status: "error"; error: string; traces?: ExecutionTraceEntry[] };
+  | {
+      status: "success";
+      data: Record<string, unknown>;
+      input?: Record<string, unknown>;
+      variables?: Record<string, unknown>;
+      extracted?: Record<string, unknown>;
+      last_response?: ExecutionResponseDebug;
+      traces?: ExecutionTraceEntry[];
+    }
+  | {
+      status: "error";
+      error: string;
+      data?: Record<string, unknown>;
+      input?: Record<string, unknown>;
+      variables?: Record<string, unknown>;
+      extracted?: Record<string, unknown>;
+      last_response?: ExecutionResponseDebug;
+      traces?: ExecutionTraceEntry[];
+      result?: {
+        data?: Record<string, unknown>;
+        input?: Record<string, unknown>;
+        variables?: Record<string, unknown>;
+        extracted?: Record<string, unknown>;
+        last_response?: ExecutionResponseDebug;
+        traces?: ExecutionTraceEntry[];
+      };
+    };
 
 interface ExecuteDirectOptions {
   environment?: string;
@@ -20,6 +50,10 @@ export interface BackendCollection {
   id: string;
   name: string;
   description?: string;
+  is_online?: boolean;
+  access_role?: string;
+  IsOnline?: boolean;
+  AccessRole?: string;
   created_at: string;
   updated_at: string;
   workflows: BackendWorkflow[];
@@ -30,6 +64,10 @@ export interface BackendWorkflow {
   collection_id: string;
   name: string;
   description?: string;
+  is_online?: boolean;
+  access_role?: string;
+  IsOnline?: boolean;
+  AccessRole?: string;
   definition?: WorkflowDefinition;
   Definition?: WorkflowDefinition;
   created_at: string;
@@ -66,17 +104,35 @@ export async function listCollections() {
   return apiFetch<{ collections: BackendCollection[] }>("/collections");
 }
 
-export async function createBackendCollection(id: string, name: string) {
+export async function createBackendCollection(
+  id: string,
+  name: string,
+  data: { description?: string; isOnline?: boolean; accessRole?: string } = {}
+) {
   return apiFetch<BackendCollection>("/collections", {
     method: "POST",
-    body: JSON.stringify({ id, name }),
+    body: JSON.stringify({
+      id,
+      name,
+      description: data.description ?? "",
+      is_online: data.isOnline ?? false,
+      access_role: data.accessRole ?? "Collection",
+    }),
   });
 }
 
-export async function updateBackendCollection(id: string, data: { name?: string; description?: string }) {
+export async function updateBackendCollection(
+  id: string,
+  data: { name?: string; description?: string; isOnline?: boolean; accessRole?: string }
+) {
   return apiFetch<BackendCollection>(`/collections/${id}`, {
     method: "PATCH",
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      name: data.name,
+      description: data.description,
+      is_online: data.isOnline,
+      access_role: data.accessRole,
+    }),
   });
 }
 

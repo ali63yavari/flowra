@@ -101,6 +101,12 @@ func (s *HTTPRequestStep) Execute(
 		Headers: headers,
 		Body:    body,
 	}
+	state.LastRequest = &workflow.HTTPRequestDebug{
+		Method:  req.Method,
+		URL:     req.URL,
+		Headers: headers,
+		Body:    body,
+	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {

@@ -8,6 +8,8 @@ type Collection struct {
 
 	Name        string `gorm:"not null" json:"name"`
 	Description string `json:"description"`
+	IsOnline    bool   `json:"is_online"`
+	AccessRole  string `gorm:"default:Collection" json:"access_role"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

@@ -84,6 +84,12 @@ func (s *FormSubmitStep) Execute(
 		},
 		Body: finalFields,
 	}
+	state.LastRequest = &workflow.HTTPRequestDebug{
+		Method:  req.Method,
+		URL:     req.URL,
+		Headers: req.Headers,
+		Body:    finalFields,
+	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {

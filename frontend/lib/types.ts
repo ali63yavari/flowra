@@ -100,9 +100,35 @@ export interface ExecutionConsoleEntry {
   stepId?: string;
   title: string;
   status: "success" | "error";
+  method?: string;
+  url?: string;
+  statusCode?: number;
+  durationMs?: number;
+  request?: ExecutionRequestDebug;
+  response?: ExecutionResponseDebug;
+  input?: Record<string, unknown>;
+  variables?: Record<string, unknown>;
+  extracted?: Record<string, unknown>;
+  trace?: ExecutionTraceEntry;
   output?: unknown;
   error?: string | null;
   createdAt: string;
+}
+
+export interface ExecutionRequestDebug {
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  body?: Record<string, string>;
+}
+
+export interface ExecutionResponseDebug {
+  status_code: number;
+  headers: Record<string, string[]>;
+  body: string;
+  content_type: string;
+  body_format: "json" | "html" | "xml" | "text" | "invalid_json" | string;
+  parsed_body?: unknown;
 }
 
 export interface ExecutionTraceEntry {
@@ -112,6 +138,11 @@ export interface ExecutionTraceEntry {
   started_at: string;
   duration_ms: number;
   output_preview?: string;
+  request?: ExecutionRequestDebug;
+  response?: ExecutionResponseDebug;
+  input?: Record<string, unknown>;
+  variables?: Record<string, unknown>;
+  extracted?: Record<string, unknown>;
   error?: string;
 }
 
@@ -120,6 +151,10 @@ export interface WorkflowExecutionState {
   activeStepId?: string;
   failedStepId?: string;
   result?: Record<string, unknown> | null;
+  input?: Record<string, unknown> | null;
+  variables?: Record<string, unknown> | null;
+  extracted?: Record<string, unknown> | null;
+  lastResponse?: ExecutionResponseDebug | null;
   error?: string | null;
   lastWorkflow?: WorkflowDefinition | null;
   consoleEntries?: ExecutionConsoleEntry[];
@@ -137,6 +172,9 @@ export interface WorkflowTemplate {
 export interface WorkspaceCollection {
   id: string;
   name: string;
+  description: string;
+  isOnline: boolean;
+  accessRole: string;
   workflowIds: string[];
   createdAt: string;
   updatedAt: string;
@@ -156,6 +194,8 @@ export interface CollectionWorkflow {
   collectionId: string;
   name: string;
   description: string;
+  isOnline: boolean;
+  accessRole: string;
   workflow: WorkflowDefinition;
   branchTargets: Record<string, BranchTargets>;
   selectedStepId?: string;

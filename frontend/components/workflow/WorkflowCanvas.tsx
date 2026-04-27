@@ -21,12 +21,12 @@ export default function WorkflowCanvas() {
   });
 
   return (
-    <section className="rounded border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-4 py-3">
+    <section className="flex h-full min-h-0 flex-col rounded border border-slate-200 bg-white">
+      <div className="shrink-0 border-b border-slate-200 px-4 py-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Graph preview</p>
         <h2 className="mt-1 text-sm font-semibold text-slate-950">Read-only projection</h2>
       </div>
-      <div className="h-[640px] min-h-0">
+      <div className="min-h-0 flex-1">
         {steps.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-slate-500">
             Add a step to see the graph.

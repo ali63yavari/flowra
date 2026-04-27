@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"net/http"
+	"time"
 )
 
 type HTTPResponse struct {
@@ -20,6 +21,16 @@ type ExecutionState struct {
 	LastHTML     string
 
 	Cookies []*http.Cookie
+}
+
+type ExecutionTraceEntry struct {
+	StepID        string    `json:"step_id"`
+	Type          string    `json:"type"`
+	Status        string    `json:"status"`
+	StartedAt     time.Time `json:"started_at"`
+	DurationMs    int64     `json:"duration_ms"`
+	OutputPreview string    `json:"output_preview,omitempty"`
+	Error         string    `json:"error,omitempty"`
 }
 
 type Step interface {

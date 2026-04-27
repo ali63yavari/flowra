@@ -12,6 +12,16 @@ type Service struct {
 	runtime *workflow.Runtime
 }
 
+type Options struct {
+	Variables map[string]interface{}
+	Trace     bool
+}
+
+type Result struct {
+	Data   map[string]interface{}         `json:"data"`
+	Traces []workflow.ExecutionTraceEntry `json:"traces,omitempty"`
+}
+
 func NewService() *Service {
 	runtime := workflow.NewRuntime()
 	steps.RegisterAll()
@@ -26,6 +36,19 @@ func (s *Service) Execute(
 	def workflow.WorkflowDefinition,
 	input map[string]interface{},
 ) (map[string]interface{}, error) {
+	result, err := s.ExecuteWithOptions(ctx, def, input, Options{})
+	if err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
+func (s *Service) ExecuteWithOptions(
+	ctx context.Context,
+	def workflow.WorkflowDefinition,
+	input map[string]interface{},
+	options Options,
+) (*Result, error) {
 
 	limits := workflow.Limits{
 		MaxSteps: 50,
@@ -39,13 +62,28 @@ func (s *Service) Execute(
 
 	state := &workflow.ExecutionState{
 		Input:     input,
-		Variables: make(map[string]interface{}),
+		Variables: copyVariables(options.Variables),
 		Extracted: make(map[string]interface{}),
 	}
 
-	if err := engine.Execute(ctx, state); err != nil {
-		return nil, err
+	traces, err := engine.ExecuteWithTrace(ctx, state, options.Trace)
+	if err != nil {
+		return &Result{
+			Data:   state.Variables,
+			Traces: traces,
+		}, err
 	}
 
-	return state.Variables, nil
+	return &Result{
+		Data:   state.Variables,
+		Traces: traces,
+	}, nil
+}
+
+func copyVariables(source map[string]interface{}) map[string]interface{} {
+	target := make(map[string]interface{})
+	for key, value := range source {
+		target[key] = value
+	}
+	return target
 }

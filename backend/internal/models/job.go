@@ -21,6 +21,8 @@ type Job struct {
 	ID            string `gorm:"primaryKey"`
 	TenantID      string `gorm:"index"`
 	IntegrationID string `gorm:"index"`
+	WorkflowID    string `gorm:"index"`
+	Environment   string
 
 	Status JobStatus
 

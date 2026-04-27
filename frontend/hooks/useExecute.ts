@@ -2,6 +2,7 @@
 
 import { executeDirect, type ExecutionInput } from "@/lib/api";
 import { nodeMeta } from "@/lib/nodeMeta";
+import type { EnvironmentVariableSet, ExecutionConsoleEntry, ExecutionTraceEntry } from "@/lib/types";
 import { useWorkflowStore } from "@/store/workflowStore";
 
 export function useExecute() {
@@ -10,6 +11,8 @@ export function useExecute() {
   const validate = useWorkflowStore((s) => s.validate);
   const execution = useWorkflowStore((s) => s.execution);
   const steps = useWorkflowStore((s) => s.workflow.steps);
+  const variables = useWorkflowStore((s) => s.variables);
+  const activeCollectionId = useWorkflowStore((s) => s.activeCollectionId);
   const setExecutionStatus = useWorkflowStore((s) => s.setExecutionStatus);
   const setExecutionResult = useWorkflowStore((s) => s.setExecutionResult);
   const addConsoleEntry = useWorkflowStore((s) => s.addConsoleEntry);
@@ -31,11 +34,12 @@ export function useExecute() {
 
     try {
       const workflow = buildDSL();
+      const executionVariables = getExecutionVariables(variables, activeCollectionId);
       setExecutionResult({ lastWorkflow: workflow });
-      const res = await executeDirect(workflow, input);
+      const res = await executeDirect(workflow, input, executionVariables);
 
       if (res.status === "error") {
-        setExecutionResult({ error: res.error, result: null });
+        setExecutionResult({ error: res.error, result: null, traces: res.traces ?? [] });
         addConsoleEntry({
           title: "Workflow run",
           status: "error",
@@ -43,7 +47,8 @@ export function useExecute() {
         });
         setExecutionStatus("failed");
       } else {
-        setExecutionResult({ result: res.data, error: null });
+        setExecutionResult({ result: res.data, error: null, traces: res.traces ?? [] });
+        addTraceConsoleEntries(res.traces, addConsoleEntry);
         addConsoleEntry({
           title: "Workflow run",
           status: "success",
@@ -74,11 +79,13 @@ export function useExecute() {
       const workflow = buildDSLUntilStep(stepId);
       const step = steps.find((candidate) => candidate.id === stepId);
       const title = step ? `${nodeMeta[step.type].label} request` : "Request run";
+      const executionVariables = getExecutionVariables(variables, activeCollectionId);
       setExecutionResult({ lastWorkflow: workflow });
-      const res = await executeDirect(workflow, input);
+      const res = await executeDirect(workflow, input, executionVariables);
 
       if (res.status === "error") {
-        setExecutionResult({ error: res.error, result: null });
+        setExecutionResult({ error: res.error, result: null, traces: res.traces ?? [] });
+        addTraceConsoleEntries(res.traces, addConsoleEntry);
         addConsoleEntry({
           stepId,
           title,
@@ -87,7 +94,8 @@ export function useExecute() {
         });
         setExecutionStatus("failed", { failedStepId: stepId });
       } else {
-        setExecutionResult({ result: res.data, error: null });
+        setExecutionResult({ result: res.data, error: null, traces: res.traces ?? [] });
+        addTraceConsoleEntries(res.traces, addConsoleEntry);
         addConsoleEntry({
           stepId,
           title,
@@ -123,4 +131,43 @@ export function useExecute() {
     error: execution.error ?? null,
     lastWorkflow: execution.lastWorkflow ?? null,
   };
+}
+
+function getExecutionVariables(
+  variables: EnvironmentVariableSet,
+  activeCollectionId?: string
+) {
+  const environment = variables.activeEnvironment;
+  return {
+    environment,
+    tenantVariables: variables.tenant[environment] ?? {},
+    collectionVariables: activeCollectionId
+      ? variables.collections[activeCollectionId]?.[environment] ?? {}
+      : {},
+    trace: true,
+  };
+}
+
+function addTraceConsoleEntries(
+  traces: ExecutionTraceEntry[] | undefined,
+  addConsoleEntry: (entry: Omit<ExecutionConsoleEntry, "id" | "createdAt">) => void
+) {
+  traces?.forEach((trace) => {
+    addConsoleEntry({
+      stepId: trace.step_id,
+      title: `${nodeMeta[trace.type as keyof typeof nodeMeta]?.label ?? trace.type} trace`,
+      status: trace.status,
+      output: parsePreview(trace.output_preview),
+      error: trace.error,
+    });
+  });
+}
+
+function parsePreview(value?: string) {
+  if (!value) return undefined;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import FlowBuilder from "@/components/flow/FlowBuilder";
 import { IconButton } from "@/components/ui/IconButton";
 import EndpointAccessPanel from "@/components/workflow/EndpointAccessPanel";
@@ -9,6 +9,7 @@ import NodeEditor from "@/components/workflow/NodeEditor";
 import NodePalette from "@/components/workflow/NodePalette";
 import RunPanel from "@/components/workflow/RunPanel";
 import WorkflowCanvas from "@/components/workflow/WorkflowCanvas";
+import { listCollections, loadBackendVariableSet } from "@/lib/api";
 import { useWorkflowStore } from "@/store/workflowStore";
 
 export default function BuilderPage() {
@@ -26,6 +27,8 @@ export default function BuilderPage() {
   const renameWorkflow = useWorkflowStore((s) => s.renameWorkflow);
   const updateWorkflowDescription = useWorkflowStore((s) => s.updateWorkflowDescription);
   const createWorkflow = useWorkflowStore((s) => s.createWorkflow);
+  const hydrateWorkspace = useWorkflowStore((s) => s.hydrateWorkspace);
+  const hydrateVariables = useWorkflowStore((s) => s.hydrateVariables);
 
   const blockingErrors = errors.filter((issue) => issue.severity === "error").length;
   const warnings = errors.filter((issue) => issue.severity === "warning").length;
@@ -42,6 +45,23 @@ export default function BuilderPage() {
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    listCollections()
+      .then((response) => {
+        if (cancelled) return;
+        hydrateWorkspace(response.collections);
+        return loadBackendVariableSet(response.collections.map((collection) => collection.id));
+      })
+      .then((variables) => {
+        if (!cancelled && variables) hydrateVariables(variables);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrateVariables, hydrateWorkspace]);
 
   return (
     <main className="h-screen overflow-hidden bg-slate-100 text-slate-950">

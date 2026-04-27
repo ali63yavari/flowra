@@ -16,8 +16,17 @@ func NewDB(dsn string) *gorm.DB {
 	}
 
 	err = db.AutoMigrate(
+		&models.Tenant{},
+		&models.User{},
+		&models.Membership{},
 		&models.Job{},
 		&models.Integration{},
+		&models.Collection{},
+		&models.Workflow{},
+		&models.Environment{},
+		&models.Variable{},
+		&models.ExecutionLog{},
+		&models.ExecutionTraceEntry{},
 	)
 	if err != nil {
 		log.Fatal(err)

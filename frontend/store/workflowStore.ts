@@ -1,6 +1,15 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { v4 as uuid } from "uuid";
+import {
+  createBackendEnvironment,
+  deleteBackendEnvironment,
+  renameBackendEnvironment,
+  replaceBackendVariables,
+  updateBackendWorkflow,
+  type BackendCollection,
+  type BackendWorkflow,
+} from "@/lib/api";
 import { createStep } from "@/lib/stepDefaults";
 import { validateWorkflow } from "@/lib/validation";
 import type {
@@ -39,7 +48,7 @@ interface WorkflowState {
   createWorkflow: (collectionId?: string, name?: string) => string;
   renameWorkflow: (id: string, name: string) => void;
   updateWorkflowDescription: (id: string, description: string) => void;
-  duplicateWorkflow: (id: string) => void;
+  duplicateWorkflow: (id: string) => string;
   deleteWorkflow: (id: string) => void;
   selectWorkflow: (id: string) => void;
   createEnvironment: (name: string) => void;
@@ -81,9 +90,12 @@ interface WorkflowState {
     result?: Record<string, unknown> | null;
     error?: string | null;
     lastWorkflow?: WorkflowDefinition | null;
+    traces?: WorkflowExecutionState["traces"];
   }) => void;
   addConsoleEntry: (entry: Omit<ExecutionConsoleEntry, "id" | "createdAt">) => void;
   clearConsoleEntries: () => void;
+  hydrateWorkspace: (collections: BackendCollection[]) => void;
+  hydrateVariables: (variables: EnvironmentVariableSet) => void;
 }
 
 const defaultExecution: WorkflowExecutionState = {
@@ -92,6 +104,7 @@ const defaultExecution: WorkflowExecutionState = {
   error: null,
   lastWorkflow: null,
   consoleEntries: [],
+  traces: [],
 };
 
 const defaultVariables: EnvironmentVariableSet = {
@@ -116,6 +129,53 @@ export const useWorkflowStore = create<WorkflowState>()(
   persist(
     (set, get) => ({
       ...initialWorkspace,
+
+      hydrateWorkspace: (backendCollections) =>
+        set((state) => {
+          if (backendCollections.length === 0) return state;
+          const collections: Record<string, WorkspaceCollection> = {};
+          const workflows: Record<string, CollectionWorkflow> = {};
+
+          backendCollections.forEach((collection) => {
+            const workflowIds = collection.workflows.map((workflow) => workflow.id);
+            collections[collection.id] = {
+              id: collection.id,
+              name: collection.name,
+              workflowIds,
+              createdAt: collection.created_at,
+              updatedAt: collection.updated_at,
+            };
+            collection.workflows.forEach((workflow) => {
+              workflows[workflow.id] = backendWorkflowToStoreWorkflow(workflow, collection.id);
+            });
+          });
+
+          const activeCollectionId = state.activeCollectionId && collections[state.activeCollectionId]
+            ? state.activeCollectionId
+            : backendCollections[0]?.id;
+          const activeCollection = activeCollectionId ? collections[activeCollectionId] : undefined;
+          const activeWorkflowId = state.activeWorkflowId && workflows[state.activeWorkflowId]
+            ? state.activeWorkflowId
+            : activeCollection?.workflowIds[0];
+          const activeWorkflow = activeWorkflowId ? workflows[activeWorkflowId] : undefined;
+
+          return {
+            collections,
+            workflows,
+            activeCollectionId,
+            activeWorkflowId,
+            ...activeFieldsFromWorkflow(activeWorkflow),
+          };
+        }),
+
+      hydrateVariables: (variables) =>
+        set((state) => ({
+          variables: {
+            ...variables,
+            environments: variables.environments.length ? variables.environments : state.variables.environments,
+            activeEnvironment: variables.activeEnvironment || state.variables.activeEnvironment,
+          },
+        })),
 
       createCollection: (name) => {
         const now = new Date().toISOString();
@@ -220,14 +280,20 @@ export const useWorkflowStore = create<WorkflowState>()(
         return workflow.id;
       },
 
-      renameWorkflow: (id, name) =>
-        set((state) => updateWorkflowOnly(state, id, { name: name.trim() || "Untitled workflow" })),
+      renameWorkflow: (id, name) => {
+        set((state) => updateWorkflowOnly(state, id, { name: name.trim() || "Untitled workflow" }));
+        syncWorkflowMetaToBackend(get(), id);
+      },
 
-      updateWorkflowDescription: (id, description) =>
-        set((state) => updateWorkflowOnly(state, id, { description })),
+      updateWorkflowDescription: (id, description) => {
+        set((state) => updateWorkflowOnly(state, id, { description }));
+        syncWorkflowMetaToBackend(get(), id);
+      },
 
       duplicateWorkflow: (id) =>
-        set((state) => {
+        {
+          let copyId = "";
+          set((state) => {
           const source = state.workflows[id];
           const collection = source ? state.collections[source.collectionId] : undefined;
           if (!source || !collection) return state;
@@ -240,6 +306,7 @@ export const useWorkflowStore = create<WorkflowState>()(
             createdAt: now,
             updatedAt: now,
           };
+          copyId = copy.id;
           const index = collection.workflowIds.indexOf(id);
           const workflowIds = [...collection.workflowIds];
           workflowIds.splice(index + 1, 0, copy.id);
@@ -254,7 +321,9 @@ export const useWorkflowStore = create<WorkflowState>()(
             activeWorkflowId: copy.id,
             ...activeFieldsFromWorkflow(copy),
           };
-        }),
+        });
+          return copyId;
+        },
 
       deleteWorkflow: (id) =>
         set((state) => {
@@ -298,6 +367,7 @@ export const useWorkflowStore = create<WorkflowState>()(
         set((state) => {
           const environmentName = sanitizeEnvironmentName(name);
           if (!environmentName || state.variables.environments.includes(environmentName)) return state;
+          void createBackendEnvironment(environmentName).catch(() => undefined);
           return {
             variables: {
               environments: [...state.variables.environments, environmentName],
@@ -324,6 +394,7 @@ export const useWorkflowStore = create<WorkflowState>()(
           ) {
             return state;
           }
+          void renameBackendEnvironment(oldName, environmentName).catch(() => undefined);
 
           return {
             variables: {
@@ -346,6 +417,7 @@ export const useWorkflowStore = create<WorkflowState>()(
       deleteEnvironment: (name) =>
         set((state) => {
           if (!state.variables.environments.includes(name) || state.variables.environments.length <= 1) return state;
+          void deleteBackendEnvironment(name).catch(() => undefined);
           const environments = state.variables.environments.filter((environment) => environment !== name);
           const nextActiveEnvironment = environments.includes(state.variables.activeEnvironment)
             ? state.variables.activeEnvironment
@@ -375,29 +447,40 @@ export const useWorkflowStore = create<WorkflowState>()(
         }),
 
       updateTenantVariables: (environment, variables) =>
-        set((state) => ({
-          variables: {
-            ...state.variables,
-            tenant: {
-              ...state.variables.tenant,
-              [environment]: variables,
-            },
-          },
-        })),
-
-      updateCollectionVariables: (collectionId, environment, variables) =>
-        set((state) => ({
-          variables: {
-            ...state.variables,
-            collections: {
-              ...state.variables.collections,
-              [collectionId]: {
-                ...(state.variables.collections[collectionId] ?? {}),
+        {
+          set((state) => ({
+            variables: {
+              ...state.variables,
+              tenant: {
+                ...state.variables.tenant,
                 [environment]: variables,
               },
             },
-          },
-        })),
+          }));
+          void replaceBackendVariables({ scope: "tenant", environment, variables }).catch(() => undefined);
+        },
+
+      updateCollectionVariables: (collectionId, environment, variables) =>
+        {
+          set((state) => ({
+            variables: {
+              ...state.variables,
+              collections: {
+                ...state.variables.collections,
+                [collectionId]: {
+                  ...(state.variables.collections[collectionId] ?? {}),
+                  [environment]: variables,
+                },
+              },
+            },
+          }));
+          void replaceBackendVariables({
+            scope: "collection",
+            collectionId,
+            environment,
+            variables,
+          }).catch(() => undefined);
+        },
 
       addStep: (type) => get().insertStepAt(get().workflow.steps.length, type),
 
@@ -413,10 +496,11 @@ export const useWorkflowStore = create<WorkflowState>()(
             errors: validateWorkflow(workflow.steps, state.branchTargets),
           });
         });
+        syncCurrentWorkflowToBackend(get());
         return step.id;
       },
 
-      updateStepConfig: (id, type, config) =>
+      updateStepConfig: (id, type, config) => {
         set((state) => {
           const workflow = {
             steps: state.workflow.steps.map((step) =>
@@ -427,9 +511,11 @@ export const useWorkflowStore = create<WorkflowState>()(
             workflow,
             errors: validateWorkflow(workflow.steps, state.branchTargets),
           });
-        }),
+        });
+        syncCurrentWorkflowToBackend(get());
+      },
 
-      updateStep: (id, updates) =>
+      updateStep: (id, updates) => {
         set((state) => {
           const workflow = {
             steps: state.workflow.steps.map((step) =>
@@ -440,9 +526,11 @@ export const useWorkflowStore = create<WorkflowState>()(
             workflow,
             errors: validateWorkflow(workflow.steps, state.branchTargets),
           });
-        }),
+        });
+        syncCurrentWorkflowToBackend(get());
+      },
 
-      moveStep: (fromIndex, toIndex) =>
+      moveStep: (fromIndex, toIndex) => {
         set((state) => {
           if (fromIndex === toIndex) return state;
           const steps = [...state.workflow.steps];
@@ -454,9 +542,11 @@ export const useWorkflowStore = create<WorkflowState>()(
             workflow,
             errors: validateWorkflow(workflow.steps, state.branchTargets),
           });
-        }),
+        });
+        syncCurrentWorkflowToBackend(get());
+      },
 
-      duplicateStep: (id) =>
+      duplicateStep: (id) => {
         set((state) => {
           const index = state.workflow.steps.findIndex((step) => step.id === id);
           if (index < 0) return state;
@@ -470,9 +560,11 @@ export const useWorkflowStore = create<WorkflowState>()(
             selectedStepId: copy.id,
             errors: validateWorkflow(workflow.steps, state.branchTargets),
           });
-        }),
+        });
+        syncCurrentWorkflowToBackend(get());
+      },
 
-      deleteStep: (id) =>
+      deleteStep: (id) => {
         set((state) => {
           const steps = state.workflow.steps.filter((step) => step.id !== id);
           const branchTargets = Object.fromEntries(
@@ -496,7 +588,9 @@ export const useWorkflowStore = create<WorkflowState>()(
             collapsedStepIds: state.collapsedStepIds.filter((stepId) => stepId !== id),
             errors: validateWorkflow(workflow.steps, branchTargets),
           });
-        }),
+        });
+        syncCurrentWorkflowToBackend(get());
+      },
 
       selectStep: (id) => set((state) => syncActiveWorkflow(state, { selectedStepId: id })),
 
@@ -523,7 +617,7 @@ export const useWorkflowStore = create<WorkflowState>()(
           })
         ),
 
-      setBranchTarget: (id, branch, targetId) =>
+      setBranchTarget: (id, branch, targetId) => {
         set((state) => {
           const branchTargets = {
             ...state.branchTargets,
@@ -536,7 +630,9 @@ export const useWorkflowStore = create<WorkflowState>()(
             branchTargets,
             errors: validateWorkflow(state.workflow.steps, branchTargets),
           });
-        }),
+        });
+        syncCurrentWorkflowToBackend(get());
+      },
 
       loadTemplate: (template, targetCollectionId) => {
         const state = get();
@@ -796,6 +892,41 @@ function cloneVariableMaps(record: Record<string, Record<string, string>>) {
   return JSON.parse(JSON.stringify(record)) as Record<string, Record<string, string>>;
 }
 
+function backendWorkflowToStoreWorkflow(
+  workflow: BackendWorkflow,
+  fallbackCollectionId: string
+): CollectionWorkflow {
+  const definition = workflow.definition ?? workflow.Definition ?? { steps: [] };
+  return {
+    id: workflow.id,
+    collectionId: workflow.collection_id ?? fallbackCollectionId,
+    name: workflow.name,
+    description: workflow.description ?? "",
+    workflow: definition,
+    branchTargets: branchTargetsFromDefinition(definition),
+    selectedStepId: definition.steps[0]?.id,
+    collapsedStepIds: [],
+    errors: validateWorkflow(definition.steps, branchTargetsFromDefinition(definition)),
+    execution: { ...defaultExecution },
+    createdAt: workflow.created_at,
+    updatedAt: workflow.updated_at,
+  };
+}
+
+function branchTargetsFromDefinition(definition: WorkflowDefinition) {
+  return Object.fromEntries(
+    definition.steps
+      .filter((step) => step.type === "condition")
+      .map((step) => [
+        step.id,
+        {
+          trueStepId: step.next_true,
+          falseStepId: step.next_false,
+        },
+      ])
+  );
+}
+
 function makeWorkflow(
   collectionId: string,
   name: string,
@@ -829,6 +960,7 @@ function activeFieldsFromWorkflow(workflow?: CollectionWorkflow) {
       ...defaultExecution,
       ...(workflow?.execution ?? {}),
       consoleEntries: workflow?.execution?.consoleEntries ?? [],
+      traces: workflow?.execution?.traces ?? [],
     },
     errors: workflow?.errors ?? [],
   };
@@ -945,4 +1077,22 @@ function areSiblingBranchTargets(
     const siblingIds = [targets.trueStepId, targets.falseStepId];
     return siblingIds.includes(currentStepId) && siblingIds.includes(nextStepId);
   });
+}
+
+function syncCurrentWorkflowToBackend(state: WorkflowState) {
+  const workflowId = state.activeWorkflowId;
+  const workflow = workflowId ? state.workflows[workflowId] : undefined;
+  if (!workflowId || !workflow) return;
+  void updateBackendWorkflow(workflowId, {
+    definition: buildDSLFromSteps(workflow.workflow.steps, workflow.branchTargets),
+  }).catch(() => undefined);
+}
+
+function syncWorkflowMetaToBackend(state: WorkflowState, workflowId: string) {
+  const workflow = state.workflows[workflowId];
+  if (!workflow) return;
+  void updateBackendWorkflow(workflowId, {
+    name: workflow.name,
+    description: workflow.description,
+  }).catch(() => undefined);
 }

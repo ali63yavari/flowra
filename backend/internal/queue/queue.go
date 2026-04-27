@@ -4,7 +4,10 @@ import "context"
 
 type Job struct {
 	ID            string                 `json:"id"`
+	TenantID      string                 `json:"tenant_id"`
 	IntegrationID string                 `json:"integration_id"`
+	WorkflowID    string                 `json:"workflow_id"`
+	Environment   string                 `json:"environment"`
 	Input         map[string]interface{} `json:"input"`
 }
 

@@ -2,6 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { IconButton } from "@/components/ui/IconButton";
+import {
+  createBackendCollection,
+  createBackendWorkflow,
+  deleteBackendCollection,
+  deleteBackendWorkflow,
+  duplicateBackendWorkflow,
+  updateBackendCollection,
+  updateBackendWorkflow,
+} from "@/lib/api";
 import { workflowTemplates } from "@/lib/templates";
 import { useWorkflowStore } from "@/store/workflowStore";
 
@@ -42,24 +51,70 @@ export default function NodePalette({ collapsed = false }: { collapsed?: boolean
     );
   };
 
-  const handleCreateCollection = () => {
+  const handleCreateCollection = async () => {
     const name = window.prompt("Collection name", `Collection ${collectionList.length + 1}`);
     if (!name) return;
     const id = createCollection(name);
     setExpandedIds((current) => [...new Set([...current, id])]);
+    try {
+      await createBackendCollection(id, name);
+    } catch {
+      // Local workspace remains usable when the backend is not configured or unavailable.
+    }
   };
 
-  const handleCreateBlankWorkflow = (collectionId: string) => {
-    createWorkflow(collectionId, "Untitled workflow");
+  const handleCreateBlankWorkflow = async (collectionId: string) => {
+    const id = createWorkflow(collectionId, "Untitled workflow");
     setExpandedIds((current) => [...new Set([...current, collectionId])]);
     setTemplateCollectionId(null);
+    try {
+      await createBackendWorkflow(collectionId, {
+        id,
+        name: "Untitled workflow",
+        definition: { steps: [] },
+      });
+    } catch {
+      // Local workspace remains usable when the backend is not configured or unavailable.
+    }
   };
 
-  const handleCreateFromTemplate = (collectionId: string, templateId: string) => {
+  const handleCreateFromTemplate = async (collectionId: string, templateId: string) => {
     const template = workflowTemplates.find((item) => item.id === templateId);
     if (template) loadTemplate(template, collectionId);
     setExpandedIds((current) => [...new Set([...current, collectionId])]);
     setTemplateCollectionId(null);
+    if (!template) return;
+    const createdWorkflow = Object.values(useWorkflowStore.getState().workflows)
+      .filter((workflow) => workflow.collectionId === collectionId && workflow.name === template.name)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    try {
+      await createBackendWorkflow(collectionId, {
+        id: createdWorkflow?.id ?? crypto.randomUUID(),
+        name: template.name,
+        description: template.description,
+        definition: {
+          steps: template.steps.map((step, index) => {
+            if (step.type === "condition") {
+              const targets = template.branchTargets?.[step.id] ?? {};
+              return {
+                ...step,
+                next: undefined,
+                next_true: targets.trueStepId,
+                next_false: targets.falseStepId,
+              };
+            }
+            return {
+              ...step,
+              next: template.steps[index + 1]?.id,
+              next_true: undefined,
+              next_false: undefined,
+            };
+          }),
+        },
+      });
+    } catch {
+      // Local workspace remains usable when the backend is not configured or unavailable.
+    }
   };
 
   return (
@@ -202,21 +257,30 @@ export default function NodePalette({ collapsed = false }: { collapsed?: boolean
                                   tone="inverse"
                                   onClick={() => {
                                     const name = window.prompt("Workflow name", workflow.name);
-                                    if (name) renameWorkflow(workflow.id, name);
+                                    if (name) {
+                                      renameWorkflow(workflow.id, name);
+                                      void updateBackendWorkflow(workflow.id, { name }).catch(() => undefined);
+                                    }
                                   }}
                                 />
                                 <IconButton
                                   label="Duplicate workflow"
                                   icon="copy"
                                   tone="inverse"
-                                  onClick={() => duplicateWorkflow(workflow.id)}
+                                  onClick={() => {
+                                    const copyId = duplicateWorkflow(workflow.id);
+                                    if (copyId) void duplicateBackendWorkflow(workflow.id, copyId).catch(() => undefined);
+                                  }}
                                 />
                                 <IconButton
                                   label="Delete workflow"
                                   icon="trash"
                                   tone="inverseDanger"
                                   onClick={() => {
-                                    if (window.confirm(`Delete "${workflow.name}"?`)) deleteWorkflow(workflow.id);
+                                    if (window.confirm(`Delete "${workflow.name}"?`)) {
+                                      deleteWorkflow(workflow.id);
+                                      void deleteBackendWorkflow(workflow.id).catch(() => undefined);
+                                    }
                                   }}
                                 />
                               </div>
@@ -232,7 +296,10 @@ export default function NodePalette({ collapsed = false }: { collapsed?: boolean
                           tone="inverse"
                           onClick={() => {
                             const name = window.prompt("Collection name", collection.name);
-                            if (name) renameCollection(collection.id, name);
+                            if (name) {
+                              renameCollection(collection.id, name);
+                              void updateBackendCollection(collection.id, { name }).catch(() => undefined);
+                            }
                           }}
                         />
                         <IconButton
@@ -242,6 +309,7 @@ export default function NodePalette({ collapsed = false }: { collapsed?: boolean
                           onClick={() => {
                             if (window.confirm(`Delete "${collection.name}" and all its workflows?`)) {
                               deleteCollection(collection.id);
+                              void deleteBackendCollection(collection.id).catch(() => undefined);
                             }
                           }}
                         />

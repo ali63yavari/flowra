@@ -105,6 +105,16 @@ export interface ExecutionConsoleEntry {
   createdAt: string;
 }
 
+export interface ExecutionTraceEntry {
+  step_id: string;
+  type: string;
+  status: "success" | "error";
+  started_at: string;
+  duration_ms: number;
+  output_preview?: string;
+  error?: string;
+}
+
 export interface WorkflowExecutionState {
   status: ExecutionStatus;
   activeStepId?: string;
@@ -113,6 +123,7 @@ export interface WorkflowExecutionState {
   error?: string | null;
   lastWorkflow?: WorkflowDefinition | null;
   consoleEntries?: ExecutionConsoleEntry[];
+  traces?: ExecutionTraceEntry[];
 }
 
 export interface WorkflowTemplate {

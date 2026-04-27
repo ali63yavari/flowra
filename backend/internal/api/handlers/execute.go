@@ -14,17 +14,20 @@ import (
 )
 
 type ExecuteHandler struct {
-	queue queue.Queue
-	repo  repository.JobRepository
+	queue     queue.Queue
+	repo      repository.JobRepository
+	workflows repository.WorkflowRepository
 }
 
 func NewExecuteHandler(
 	q queue.Queue,
 	repo repository.JobRepository,
+	workflows repository.WorkflowRepository,
 ) *ExecuteHandler {
 	return &ExecuteHandler{
-		queue: q,
-		repo:  repo,
+		queue:     q,
+		repo:      repo,
+		workflows: workflows,
 	}
 }
 
@@ -35,6 +38,10 @@ func (h *ExecuteHandler) Execute(c *fiber.Ctx) error {
 	}
 
 	tenant := c.Locals("tenant").(*models.Tenant)
+	workflowID := c.Params("id")
+	if _, err := h.workflows.GetByID(context.Background(), tenant.ID, workflowID); err != nil {
+		return err
+	}
 
 	inputBytes, _ := json.Marshal(input)
 
@@ -43,7 +50,9 @@ func (h *ExecuteHandler) Execute(c *fiber.Ctx) error {
 	job := &models.Job{
 		ID:            jobID,
 		TenantID:      tenant.ID,
-		IntegrationID: c.Params("id"),
+		IntegrationID: workflowID,
+		WorkflowID:    workflowID,
+		Environment:   c.Get("X-Flowra-Environment"),
 		Status:        models.JobQueued,
 		Input:         inputBytes,
 		MaxAttempts:   3,
@@ -57,12 +66,15 @@ func (h *ExecuteHandler) Execute(c *fiber.Ctx) error {
 	_ = h.queue.Publish(
 		context.Background(), queue.Job{
 			ID:            jobID,
-			IntegrationID: job.IntegrationID,
+			TenantID:      tenant.ID,
+			IntegrationID: workflowID,
+			WorkflowID:    workflowID,
+			Environment:   job.Environment,
 			Input:         input,
 		},
 	)
 
-	usage.TrackExecution(tenant.ID, job.IntegrationID)
+	usage.TrackExecution(tenant.ID, job.WorkflowID)
 
 	return c.JSON(
 		fiber.Map{

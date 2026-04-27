@@ -89,12 +89,16 @@ func (s *HTTPRequestStep) Execute(
 	for k, v := range s.config.Body {
 		body[k] = workflow.ResolveTemplate(v, state)
 	}
+	headers := map[string]string{}
+	for k, v := range s.config.Headers {
+		headers[k] = workflow.ResolveTemplate(v, state)
+	}
 
 	// --- Step 4: Execute Request ---
 	req := &httpclient.Request{
 		Method:  s.config.Method,
 		URL:     url,
-		Headers: s.config.Headers,
+		Headers: headers,
 		Body:    body,
 	}
 

@@ -20,8 +20,12 @@ func NewExecuteDirectHandler(svc *execution.Service) *ExecuteDirectHandler {
 }
 
 type ExecuteDirectRequest struct {
-	Workflow workflow.WorkflowDefinition `json:"workflow"`
-	Input    map[string]interface{}      `json:"input"`
+	Workflow            workflow.WorkflowDefinition `json:"workflow"`
+	Input               map[string]interface{}      `json:"input"`
+	Environment         string                      `json:"environment"`
+	TenantVariables     map[string]interface{}      `json:"tenant_variables"`
+	CollectionVariables map[string]interface{}      `json:"collection_variables"`
+	Trace               bool                        `json:"trace"`
 }
 
 func (h *ExecuteDirectHandler) Execute(c *fiber.Ctx) error {
@@ -31,12 +35,21 @@ func (h *ExecuteDirectHandler) Execute(c *fiber.Ctx) error {
 		return err
 	}
 
-	result, err := h.service.Execute(context.Background(), req.Workflow, req.Input)
+	result, err := h.service.ExecuteWithOptions(
+		context.Background(),
+		req.Workflow,
+		req.Input,
+		execution.Options{
+			Variables: mergeDirectVariables(req.TenantVariables, req.CollectionVariables),
+			Trace:     req.Trace,
+		},
+	)
 	if err != nil {
 		return c.Status(500).JSON(
 			fiber.Map{
 				"status": "error",
 				"error":  err.Error(),
+				"traces": resultTraces(result),
 			},
 		)
 	}
@@ -44,7 +57,27 @@ func (h *ExecuteDirectHandler) Execute(c *fiber.Ctx) error {
 	return c.JSON(
 		fiber.Map{
 			"status": "success",
-			"data":   result,
+			"data":   result.Data,
+			"traces": result.Traces,
 		},
 	)
+}
+
+func mergeDirectVariables(
+	tenantVariables map[string]interface{},
+	collectionVariables map[string]interface{},
+) map[string]interface{} {
+	variables := map[string]interface{}{}
+	for key, value := range tenantVariables {
+		variables[key] = value
+	}
+	tenantState := &workflow.ExecutionState{Variables: variables}
+	for key, value := range collectionVariables {
+		if text, ok := value.(string); ok {
+			variables[key] = workflow.ResolveTemplate(text, tenantState)
+		} else {
+			variables[key] = value
+		}
+	}
+	return variables
 }
